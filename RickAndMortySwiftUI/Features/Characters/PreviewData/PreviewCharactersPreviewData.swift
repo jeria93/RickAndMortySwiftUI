@@ -9,6 +9,7 @@ import Foundation
 
 enum CharactersPreviewData {
     static func some() -> [Characters] {
+        
         [
             .init(
                 id: 1,
