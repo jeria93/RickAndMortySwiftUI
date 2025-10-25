@@ -18,8 +18,11 @@ struct RMService {
         let url = base.appending(path: "character")
         let (data, response) = try await URLSession.shared.data(from: url)
 
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        guard
+            let http = response as? HTTPURLResponse,      // Vakt 1: måste vara HTTP-svar
+            (200...299).contains(http.statusCode)         // Vakt 2: statuskod måste vara 2xx
+        else {
+            throw URLError(.badServerResponse)            // Någon vakt säger nej → ut direkt
         }
 
         let decoded = try JSONDecoder().decode(CharactersResponse.self, from: data)
