@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		030EF36E2EAE76E5008DC095 /* PreviewID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030EF36D2EAE76E5008DC095 /* PreviewID.swift */; };
 		0317377D2EAD650E001D8DD6 /* CharactersView+Previews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0317377C2EAD650E001D8DD6 /* CharactersView+Previews.swift */; };
 		031737802EAD73F5001D8DD6 /* PreviewHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */; };
 		032903652EAC0D6700B08713 /* Characters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032903642EAC0D6700B08713 /* Characters.swift */; };
@@ -21,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		030EF36D2EAE76E5008DC095 /* PreviewID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewID.swift; sourceTree = "<group>"; };
 		0317377C2EAD650E001D8DD6 /* CharactersView+Previews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CharactersView+Previews.swift"; sourceTree = "<group>"; };
 		0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewHelper.swift; sourceTree = "<group>"; };
 		032903642EAC0D6700B08713 /* Characters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Characters.swift; sourceTree = "<group>"; };
@@ -50,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */,
+				030EF36D2EAE76E5008DC095 /* PreviewID.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -243,6 +246,7 @@
 				031737802EAD73F5001D8DD6 /* PreviewHelper.swift in Sources */,
 				0317377D2EAD650E001D8DD6 /* CharactersView+Previews.swift in Sources */,
 				032903852EAC1BAC00B08713 /* CharactersViewModel.swift in Sources */,
+				030EF36E2EAE76E5008DC095 /* PreviewID.swift in Sources */,
 				03B9660B2EACE51D009CB43A /* CharactersView.swift in Sources */,
 				032903652EAC0D6700B08713 /* Characters.swift in Sources */,
 				03B9660E2EACE5C7009CB43A /* PreviewFactory + Characters.swift in Sources */,
