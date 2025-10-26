@@ -12,6 +12,8 @@ struct RickAndMortySwiftUIApp: App {
     var body: some Scene {
         WindowGroup {
             CharactersView()
+//              Run the actual API
+//            CharactersView(viewModel: .live())
         }
     }
 }

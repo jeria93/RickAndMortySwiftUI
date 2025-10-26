@@ -9,7 +9,7 @@ import SwiftUI
 
 struct CharactersView: View {
     @StateObject private var characterViewModel: CharactersViewModel
-
+    
     init(viewModel: CharactersViewModel? = nil) {
         _characterViewModel = StateObject(wrappedValue: viewModel ?? .mock())
     }
@@ -23,11 +23,11 @@ struct CharactersView: View {
                     VStack(spacing: 10) {
                         Text("Something went wrong")
                             .font(.headline)
-
+                        
                         Text(error)
                             .font(.caption)
                             .foregroundColor(.secondary)
-
+                        
                         HStack {
                             Button("Close") {
                                 characterViewModel.dismissError()
@@ -39,10 +39,10 @@ struct CharactersView: View {
                             }
                             .buttonStyle(.borderedProminent)
                         }
-
+                        
                     }
                 } else {
-
+                    
                     List(characterViewModel.characters) { character in
                         HStack(spacing: 12) {
                             AsyncImage(url: character.image) { phase in
@@ -62,23 +62,26 @@ struct CharactersView: View {
                             }
                             .frame(width: 56, height: 56)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
-
+                            
                             Text(character.name)
                                 .font(.headline)
-
-
+                            
+                            
                         }
                         .padding(.vertical, 4)
                     }
                     .listStyle(.plain)
                     .refreshable { await characterViewModel.load() }
-
+                    
                 }
-
+                
             }
             .navigationTitle("Characters")
         }
-        .task { await characterViewModel.load() }
+        .task {
+            guard !ProcessInfo.processInfo.isPreview else { return }
+            await characterViewModel.load()
+        }
     }
 }
 

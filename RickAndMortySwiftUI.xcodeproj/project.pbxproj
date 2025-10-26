@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0317377D2EAD650E001D8DD6 /* CharactersView+Previews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0317377C2EAD650E001D8DD6 /* CharactersView+Previews.swift */; };
+		031737802EAD73F5001D8DD6 /* PreviewHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */; };
 		032903652EAC0D6700B08713 /* Characters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032903642EAC0D6700B08713 /* Characters.swift */; };
 		032903672EAC0FB200B08713 /* RMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032903662EAC0FB200B08713 /* RMService.swift */; };
 		032903692EAC136800B08713 /* CharacterRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 032903682EAC136800B08713 /* CharacterRepository.swift */; };
@@ -21,6 +22,7 @@
 
 /* Begin PBXFileReference section */
 		0317377C2EAD650E001D8DD6 /* CharactersView+Previews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CharactersView+Previews.swift"; sourceTree = "<group>"; };
+		0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewHelper.swift; sourceTree = "<group>"; };
 		032903642EAC0D6700B08713 /* Characters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Characters.swift; sourceTree = "<group>"; };
 		032903662EAC0FB200B08713 /* RMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RMService.swift; sourceTree = "<group>"; };
 		032903682EAC136800B08713 /* CharacterRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterRepository.swift; sourceTree = "<group>"; };
@@ -44,6 +46,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0317377E2EAD73EB001D8DD6 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				0317377F2EAD73F5001D8DD6 /* PreviewHelper.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
 		0329036A2EAC17D200B08713 /* Characters */ = {
 			isa = PBXGroup;
 			children = (
@@ -85,6 +95,7 @@
 		034F60D12EAB6756009E9EEB /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				0317377E2EAD73EB001D8DD6 /* Utils */,
 				034F60D32EAB6776009E9EEB /* Models */,
 				034F60D42EAB677B009E9EEB /* Networking */,
 				034F60D52EAB6784009E9EEB /* Data */,
@@ -229,6 +240,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				031737802EAD73F5001D8DD6 /* PreviewHelper.swift in Sources */,
 				0317377D2EAD650E001D8DD6 /* CharactersView+Previews.swift in Sources */,
 				032903852EAC1BAC00B08713 /* CharactersViewModel.swift in Sources */,
 				03B9660B2EACE51D009CB43A /* CharactersView.swift in Sources */,
