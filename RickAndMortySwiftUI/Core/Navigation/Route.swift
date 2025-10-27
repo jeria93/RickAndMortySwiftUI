@@ -7,7 +7,11 @@
 
 import Foundation
 
-/// All app routes
+/// All app navigation destinations.
+///
+/// Use with `Router.path` inside `NavigationStack`.
 enum Route: Hashable {
+    /// Detail page for a specific character.
+    /// - Parameter Characters: The selected character to show.
     case characterDetail(Characters)
 }
