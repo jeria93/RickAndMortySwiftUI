@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct RickAndMortySwiftUIApp: App {
+
+    @StateObject private var router = Router()
+
     var body: some Scene {
         WindowGroup {
             CharactersView()
+                .environmentObject(router)
 //              Run the actual API
 //            CharactersView(viewModel: .live())
         }
