@@ -19,40 +19,19 @@ struct CharactersView: View {
         NavigationStack(path: $router.path) {
             Group {
                 if characterViewModel.isLoading {
-                    ProgressView("Loading...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingView(message: "Loading...")
                 } else if let error = characterViewModel.errorMessage {
-                    VStack(spacing: 10) {
-                        Text("Something went wrong").font(.headline)
-                        Text(error).font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            Button("Close") { characterViewModel.dismissError() }
-                            Button("Retry") { Task { await characterViewModel.load() } }
-                                .buttonStyle(.borderedProminent)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ErrorStateView(
+                        title: "Something went wrong",
+                        message: error,
+                        close: { characterViewModel.dismissError() },
+                        retry: { Task { await characterViewModel.load() } }
+                    )
+
                 } else {
                     List(characterViewModel.characters) { character in
-                        HStack(spacing: 12) {
-                            AsyncImage(url: character.image) { phase in
-                                switch phase {
-                                case .empty: ProgressView()
-                                case .success(let image): image.resizable().scaledToFill()
-                                case .failure: Image(systemName: "person.crop.square").resizable().scaledToFit()
-                                @unknown default: EmptyView()
-                                }
-                            }
-                            .frame(width: 56, height: 56)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                            Text(character.name).font(.headline)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            router.push(.characterDetail(character))
-                        }
-                        .padding(.vertical, 4)
+                        CharacterRowView(name: character.name, imageURL: character.image)
+                            .onTapGesture { router.push(.characterDetail(character)) }
                     }
                     .listStyle(.plain)
                     .refreshable { await characterViewModel.load() }
