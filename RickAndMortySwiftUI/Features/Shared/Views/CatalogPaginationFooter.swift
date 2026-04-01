@@ -37,6 +37,7 @@ struct CatalogPaginationFooter: View {
             HStack {
                 Spacer()
                 ProgressView()
+                    .tint(AppTheme.portalGreen)
                 Spacer()
             }
             .padding(.vertical, 12)
@@ -47,7 +48,7 @@ struct CatalogPaginationFooter: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("Try Again", action: onRetry)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -55,7 +56,7 @@ struct CatalogPaginationFooter: View {
             HStack {
                 Spacer()
                 Button(loadMoreTitle, action: onLoadMore)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                 Spacer()
             }
             .padding(.vertical, 8)

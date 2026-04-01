@@ -26,7 +26,7 @@ struct ErrorStateView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppTheme.portalCyan)
                         
                         Text(title)
                             .font(.headline)
@@ -42,6 +42,9 @@ struct ErrorStateView: View {
                     buttonGroup
                         .frame(maxWidth: 360)
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .rmCardStyle(cornerRadius: 18)
                 .frame(maxWidth: contentMaxWidth, minHeight: geometry.size.height)
                 .padding(.horizontal, horizontalPadding)
                 .padding(.vertical, verticalPadding)
@@ -49,6 +52,7 @@ struct ErrorStateView: View {
             .scrollBounceBehavior(.basedOnSize)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .rmScreenBackground()
     }
     
     @ViewBuilder

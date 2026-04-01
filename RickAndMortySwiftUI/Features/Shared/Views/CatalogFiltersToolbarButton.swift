@@ -19,6 +19,8 @@ struct CatalogFiltersToolbarButton: View {
                 ? "line.3.horizontal.decrease.circle.fill"
                 : "line.3.horizontal.decrease.circle"
             )
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(hasActiveQuery ? AppTheme.portalGreen : .primary)
         }
     }
 }

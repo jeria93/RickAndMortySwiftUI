@@ -59,6 +59,7 @@ struct CharacterDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
         }
+        .rmScreenBackground()
         .scrollBounceBehavior(.basedOnSize)
     }
 
@@ -71,7 +72,7 @@ struct CharacterDetailView: View {
                 case .empty, .loading:
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(.quaternary)
+                            .fill(AppTheme.portalGreen.opacity(0.14))
                         ProgressView()
                     }
                 case .success(let image):
@@ -81,15 +82,19 @@ struct CharacterDetailView: View {
                 case .failure:
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(.quaternary)
+                            .fill(AppTheme.portalGreen.opacity(0.14))
                         Image(systemName: "person.crop.square")
                             .imageScale(.large)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.portalCyan)
                     }
                 }
             }
             .frame(width: 110, height: 110)
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(AppTheme.cardStroke, lineWidth: 1)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(viewModel.detail?.name ?? character.name)
@@ -111,10 +116,7 @@ struct CharacterDetailView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.thinMaterial)
-        )
+        .rmCardStyle(cornerRadius: 16)
     }
 
     private var infoSection: some View {
@@ -136,6 +138,8 @@ struct CharacterDetailView: View {
                 DetailRow(label: "Location", value: "-")
             }
         }
+        .padding(16)
+        .rmCardStyle(cornerRadius: 14)
     }
 
     private var episodesSection: some View {
@@ -199,16 +203,13 @@ struct CharacterDetailView: View {
                         }
                     }
                     .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.thinMaterial)
-                    )
+                    .rmCardStyle(cornerRadius: 12)
 
                     if sectionState.canToggleExpansion {
                         Button(sectionState.expansionButtonTitle) {
                             showsAllEpisodes.toggle()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
 
                         if let summary = sectionState.collapsedSummaryText {
                             Text(summary)

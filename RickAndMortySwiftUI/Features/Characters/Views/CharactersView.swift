@@ -59,6 +59,7 @@ struct CharactersView: View {
                 }
             }
         }
+        .rmScreenBackground()
         .task {
             guard !ProcessInfo.processInfo.isPreview else { return }
             await characterViewModel.load()
@@ -118,14 +119,16 @@ struct CharactersView: View {
                         CharacterRowView(name: character.name, imageURL: character.image)
                     }
                     .buttonStyle(PressableRowButtonStyle())
-                        .onAppear {
-                            Task {
-                                await characterViewModel.loadNextPageIfNeeded(
-                                    currentCharacter: character
-                                )
-                            }
+                    .onAppear {
+                        Task {
+                            await characterViewModel.loadNextPageIfNeeded(
+                                currentCharacter: character
+                            )
                         }
-                        .listRowInsets(rowInsets)
+                    }
+                    .listRowInsets(rowInsets)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
 
                 if characterViewModel.isLoadingNextPage ||
@@ -138,11 +141,13 @@ struct CharactersView: View {
                         onRetry: { Task { await characterViewModel.loadNextPage() } },
                         onLoadMore: {}
                     )
-                        .listRowInsets(rowInsets)
-                        .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .refreshable { await characterViewModel.load() }
         }
     }
@@ -240,9 +245,15 @@ struct CharactersView_Previews: PreviewProvider {
 private struct PressableRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.primary.opacity(configuration.isPressed ? 0.08 : 0))
+                    .fill(configuration.isPressed ? AppTheme.pressedFill : AppTheme.cardFill)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(AppTheme.cardStroke, lineWidth: 1)
             }
             .scaleEffect(configuration.isPressed ? 0.995 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
