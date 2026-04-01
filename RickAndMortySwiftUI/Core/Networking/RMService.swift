@@ -37,14 +37,32 @@ enum RMServiceError: LocalizedError {
 /// Only implements a single endpoint for this demo:
 /// `GET /api/character`.
 struct RMService {
+    private static let defaultBaseURL = URL(string: "https://rickandmortyapi.com/api")
+    private static let liveSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .useProtocolCachePolicy
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        configuration.urlCache = URLCache(
+            memoryCapacity: 32 * 1_024 * 1_024,
+            diskCapacity: 128 * 1_024 * 1_024,
+            diskPath: "RMServiceURLCache"
+        )
+        return URLSession(configuration: configuration)
+    }()
+    
     /// Base URL for all requests. Optional so we can validate it at runtime.
     private let base: URL?
     private let session: URLSession
     private let decoder: JSONDecoder
     
+    static func live(base: URL? = defaultBaseURL) -> Self {
+        .init(base: base, session: liveSession)
+    }
+    
     init(
-        base: URL? = URL(string: "https://rickandmortyapi.com/api"),
-        session: URLSession = .shared,
+        base: URL? = RMService.defaultBaseURL,
+        session: URLSession = RMService.liveSession,
         decoder: JSONDecoder = JSONDecoder()
     ) {
         self.base = base
@@ -60,7 +78,7 @@ struct RMService {
     /// - Throws: `RMServiceError` for URL, transport, response and decoding failures.
     func fetchCharacters(
         page: Int,
-        query: CharactersQuery = .init()
+        query: CharactersQuery? = nil
     ) async throws -> CharactersPage {
         let base = try baseURL()
         
@@ -75,7 +93,7 @@ struct RMService {
         let (data, http) = try await requestData(from: url)
         
         // For filtered searches, 404 means "no matches", not a hard error.
-        if http.statusCode == 404, !query.isEmpty {
+        if http.statusCode == 404, query?.isEmpty == false {
             return CharactersPage(characters: [], nextPage: nil)
         }
         
@@ -97,7 +115,7 @@ struct RMService {
     
     /// Backward-compatible helper for callers that only need first-page results.
     func fetchCharacters() async throws -> [Characters] {
-        let page = try await fetchCharacters(page: 1, query: .init())
+        let page = try await fetchCharacters(page: 1, query: nil)
         return page.characters
     }
     
@@ -143,8 +161,9 @@ struct RMService {
         }
     }
     
-    private func makeQueryItems(page: Int, query: CharactersQuery) -> [URLQueryItem] {
+    private func makeQueryItems(page: Int, query: CharactersQuery?) -> [URLQueryItem] {
         var queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
+        guard let query else { return queryItems }
         
         if !query.trimmedName.isEmpty {
             queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))

@@ -7,6 +7,7 @@ A lightweight SwiftUI app that fetches characters from the Rick and Morty API.
 - SwiftUI + MVVM architecture
 - Repository + network service layers
 - Typed network errors (`RMServiceError`)
+- URL cache + lightweight repository cache (with stale fallback on network errors)
 - Stable UI states: loading, error, empty, and list
 - Enum-based navigation (`Router` / `Route`)
 - Unit tests for `CharactersViewModel`, `CharactersRepository`, and `RMService`
@@ -14,7 +15,10 @@ A lightweight SwiftUI app that fetches characters from the Rick and Morty API.
 ## API
 
 - Base URL: `https://rickandmortyapi.com/api`
-- Endpoint used: `GET /character`
+- Endpoints used:
+  - `GET /character`
+  - `GET /character/{id}`
+  - `GET /episode/{id,id,...}`
 
 ## Run
 
@@ -40,7 +44,20 @@ xcodebuild -project RickAndMortySwiftUI.xcodeproj \
 
 - Runtime uses live API by default.
 - SwiftUI previews use deterministic mock data and skip network calls.
-- `CharacterDetailView` is still `WIP`.
+- `CharacterDetailView` includes detail info + episode list.
+
+## Caching
+
+- Network layer uses `URLCache` (in-memory + disk) with conservative request/resource timeouts.
+- Repository layer caches:
+  - character pages by `page + query`
+  - character detail by `id`
+  - episodes by normalized `ids`
+- Fresh cache entries are served directly.
+- If cache is stale, repository tries network first; if network fails, stale cache is used as fallback.
+- Live cache can be invalidated via:
+  - `CharactersRepository.clearLiveCache()`
+  - `CharacterDetailRepository.clearLiveCache()`
 
 ## License
 
