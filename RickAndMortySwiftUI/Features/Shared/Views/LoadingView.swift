@@ -24,4 +24,10 @@ struct LoadingView: View {
     }
 }
 
-#Preview { LoadingView(message: "Loading...") }
+#if DEBUG
+struct LoadingView_Previews: PreviewProvider {
+    static var previews: some View {
+        LoadingView(message: "Loading...")
+    }
+}
+#endif

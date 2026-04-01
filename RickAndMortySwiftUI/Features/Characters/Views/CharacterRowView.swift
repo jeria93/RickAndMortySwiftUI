@@ -29,7 +29,6 @@ struct CharacterRowView: View {
                 @unknown default:
                     Color.clear
                 }
-                
             }
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -39,24 +38,25 @@ struct CharacterRowView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        
     }
 }
 
-#Preview {
-    List {
-        CharacterRowView(
-            name: "Rick Sanchez",
-            imageURL: URL(
-                string: "https://rickandmortyapi.com/api/character/avatar/1.jpeg"
+#if DEBUG
+struct CharacterRowView_Previews: PreviewProvider {
+    static var previews: some View {
+        List {
+            CharacterRowView(
+                name: "Rick Sanchez",
+                imageURL: URL(
+                    string: "https://rickandmortyapi.com/api/character/avatar/1.jpeg"
+                )
             )
-        )
-        CharacterRowView(
-            name: "Morty Smith",
-            imageURL: nil
-        )
+            CharacterRowView(
+                name: "Morty Smith",
+                imageURL: nil
+            )
+        }
+        .listStyle(.plain)
     }
-    .listStyle(
-        .plain
-    )
 }
+#endif

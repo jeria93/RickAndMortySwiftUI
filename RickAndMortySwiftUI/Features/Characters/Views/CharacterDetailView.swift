@@ -13,7 +13,3 @@ struct CharacterDetailView: View {
         Text("WIP")
     }
 }
-
-#Preview {
-//    CharacterDetailView()
-}

@@ -13,18 +13,14 @@ import SwiftUI
 /// any view can navigate using enum-based routes.
 @main
 struct RickAndMortySwiftUIApp: App {
-
+    
     /// Global router for the app lifetime.
     @StateObject private var router = Router()
     
     var body: some Scene {
         WindowGroup {
-            CharactersView()                // Use mock VM by default
+            CharactersView(viewModel: .live())
                 .environmentObject(router)
-
-            // To run the real API instead, pass a live ViewModel:
-            // CharactersView(viewModel: .live())
-            //     .environmentObject(router)
         }
     }
 }
