@@ -42,6 +42,43 @@ final class RMServiceTests: XCTestCase {
         XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/character")
     }
 
+    func testFetchCharacters_whenFetchingPage_mapsNextPageAndAddsPageQuery() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+
+        let payload = """
+        {
+          "info": {
+            "next": "https://rickandmortyapi.com/api/character?page=3"
+          },
+          "results": [
+            {
+              "id": 20,
+              "name": "Ants in my Eyes Johnson",
+              "image": "https://rickandmortyapi.com/api/character/avatar/20.jpeg"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+        let page = try await sut.fetchCharacters(page: 2)
+
+        XCTAssertEqual(page.characters.count, 1)
+        XCTAssertEqual(page.nextPage, 3)
+        XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/character")
+        XCTAssertEqual(URLProtocolStub.lastRequestURL?.query, "page=2")
+    }
+
     func testFetchCharacters_whenHTTPIsNon2xx_mapsHTTPStatusError() async {
         let baseURL = URL(string: "https://rickandmortyapi.com/api")!
         let endpointURL = baseURL.appending(path: "character")
