@@ -292,6 +292,120 @@ final class CharactersViewModelTests: XCTestCase {
     }
 }
 
+@MainActor
+final class CharacterDetailViewModelTests: XCTestCase {
+
+    func testLoad_success_fetchesDetailAndEpisodesInRequestedOrder() async {
+        let detail = makeDetail(id: 1, episodeIDs: [1, 2, 3])
+        var requestedEpisodeIDs: [Int] = []
+
+        let repository = CharacterDetailRepository(
+            fetchDetail: { id in
+                XCTAssertEqual(id, 1)
+                return detail
+            },
+            fetchEpisodes: { ids in
+                requestedEpisodeIDs = ids
+                return [
+                    self.makeEpisode(id: 3, code: "S01E03", name: "Anatomy Park"),
+                    self.makeEpisode(id: 1, code: "S01E01", name: "Pilot"),
+                    self.makeEpisode(id: 2, code: "S01E02", name: "Lawnmower Dog")
+                ]
+            }
+        )
+
+        let sut = CharacterDetailViewModel(characterID: 1, repository: repository)
+        await sut.load()
+
+        XCTAssertEqual(requestedEpisodeIDs, [1, 2, 3])
+        XCTAssertEqual(sut.detail?.id, 1)
+        XCTAssertEqual(sut.episodes.map(\.id), [1, 2, 3])
+        XCTAssertFalse(sut.isLoading)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testLoad_whenDetailHasNoEpisodes_skipsEpisodeFetch() async {
+        var fetchEpisodesCalled = false
+        let detail = makeDetail(id: 2, episodeIDs: [])
+
+        let repository = CharacterDetailRepository(
+            fetchDetail: { _ in detail },
+            fetchEpisodes: { _ in
+                fetchEpisodesCalled = true
+                return []
+            }
+        )
+
+        let sut = CharacterDetailViewModel(characterID: 2, repository: repository)
+        await sut.load()
+
+        XCTAssertFalse(fetchEpisodesCalled)
+        XCTAssertEqual(sut.detail?.id, 2)
+        XCTAssertTrue(sut.episodes.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testLoad_whenDetailRequestFails_setsError() async {
+        struct StubError: Error {}
+
+        let repository = CharacterDetailRepository(
+            fetchDetail: { _ in throw StubError() },
+            fetchEpisodes: { _ in [] }
+        )
+
+        let sut = CharacterDetailViewModel(characterID: 99, repository: repository)
+        await sut.load()
+
+        XCTAssertNil(sut.detail)
+        XCTAssertTrue(sut.episodes.isEmpty)
+        XCTAssertNotNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    func testLoad_whenEpisodeRequestFails_keepsDetailAndReturnsEmptyEpisodes() async {
+        struct StubError: Error {}
+        let detail = makeDetail(id: 4, episodeIDs: [1, 2])
+
+        let repository = CharacterDetailRepository(
+            fetchDetail: { _ in detail },
+            fetchEpisodes: { _ in throw StubError() }
+        )
+
+        let sut = CharacterDetailViewModel(characterID: 4, repository: repository)
+        await sut.load()
+
+        XCTAssertEqual(sut.detail?.id, 4)
+        XCTAssertTrue(sut.episodes.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+        XCTAssertFalse(sut.isLoading)
+    }
+
+    private func makeDetail(id: Int, episodeIDs: [Int]) -> CharacterDetail {
+        let episodeURLs = episodeIDs.compactMap { URL(string: "https://rickandmortyapi.com/api/episode/\($0)") }
+        return CharacterDetail(
+            id: id,
+            name: "Character \(id)",
+            status: "Alive",
+            species: "Human",
+            type: "",
+            gender: "Male",
+            origin: RMNamedResource(name: "Earth", url: "https://rickandmortyapi.com/api/location/1"),
+            location: RMNamedResource(name: "Citadel", url: "https://rickandmortyapi.com/api/location/3"),
+            image: URL(string: "https://rickandmortyapi.com/api/character/avatar/\(id).jpeg"),
+            episode: episodeURLs
+        )
+    }
+
+    private func makeEpisode(id: Int, code: String, name: String) -> Episode {
+        Episode(
+            id: id,
+            name: name,
+            airDate: "2013-12-\(String(format: "%02d", id))",
+            episode: code
+        )
+    }
+}
+
 final class CharactersRepositoryTests: XCTestCase {
 
     func testFetch_returnsProvidedCharactersPage() async throws {
@@ -316,7 +430,7 @@ final class CharactersRepositoryTests: XCTestCase {
         let repository = CharactersRepository { _, _ in
             throw StubError()
         }
-
+        
         do {
             _ = try await repository.fetch(1, .init())
             XCTFail("Expected fetch(page:query:) to throw")
@@ -326,7 +440,7 @@ final class CharactersRepositoryTests: XCTestCase {
             XCTFail("Unexpected error type: \(error)")
         }
     }
-    
+
     func testMock_returnsPreviewCharactersOnPage1() async throws {
         let repository = CharactersRepository.mock()
 
