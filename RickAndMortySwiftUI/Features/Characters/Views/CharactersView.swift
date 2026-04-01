@@ -64,7 +64,12 @@ struct CharactersView: View {
             await characterViewModel.load()
         }
         .sheet(isPresented: $isSpeciesTypeSheetPresented) {
-            speciesTypeFilterSheet
+            CharactersSpeciesTypeFilterSheet(
+                speciesDraft: $speciesFilterDraft,
+                typeDraft: $typeFilterDraft,
+                onCancel: { isSpeciesTypeSheetPresented = false },
+                onApply: { applySpeciesAndTypeFilters() }
+            )
         }
     }
 
@@ -121,7 +126,14 @@ struct CharactersView: View {
 
                 if characterViewModel.isLoadingNextPage ||
                     characterViewModel.paginationErrorMessage != nil {
-                    paginationFooter
+                    CatalogPaginationFooter(
+                        isLoadingNextPage: characterViewModel.isLoadingNextPage,
+                        paginationErrorMessage: characterViewModel.paginationErrorMessage,
+                        canLoadMore: false,
+                        loadMoreTitle: nil,
+                        onRetry: { Task { await characterViewModel.loadNextPage() } },
+                        onLoadMore: {}
+                    )
                         .listRowInsets(rowInsets)
                         .listRowSeparator(.hidden)
                 }
@@ -148,32 +160,6 @@ struct CharactersView: View {
         : "Try again to load characters."
     }
 
-    @ViewBuilder
-    private var paginationFooter: some View {
-        if characterViewModel.isLoadingNextPage {
-            HStack {
-                Spacer()
-                ProgressView()
-                Spacer()
-            }
-            .padding(.vertical, 12)
-        } else if let paginationError = characterViewModel.paginationErrorMessage {
-            VStack(spacing: 8) {
-                Text(paginationError)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button("Try Again") {
-                    Task { await characterViewModel.loadNextPage() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-        }
-    }
-
     private var retryButton: some View {
         Button("Retry") {
             Task { await characterViewModel.load() }
@@ -193,35 +179,6 @@ struct CharactersView: View {
     private var hasSpeciesOrTypeFilter: Bool {
         !speciesFilterDraftValue(characterViewModel.speciesFilter).isEmpty ||
         !speciesFilterDraftValue(characterViewModel.typeFilter).isEmpty
-    }
-
-    private var speciesTypeFilterSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Text Filters") {
-                    TextField("Species (e.g. Human)", text: $speciesFilterDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Type (e.g. Parasite)", text: $typeFilterDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-            }
-            .navigationTitle("Species & Type")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isSpeciesTypeSheetPresented = false
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
-                        applySpeciesAndTypeFilters()
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
     }
 
     private func horizontalPadding(for width: CGFloat) -> CGFloat {

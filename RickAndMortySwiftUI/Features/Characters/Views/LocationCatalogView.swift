@@ -104,45 +104,16 @@ struct LocationCatalogView: View {
                     .padding(.vertical, 4)
                 }
                 
-                paginationFooter
+                CatalogPaginationFooter(
+                    isLoadingNextPage: viewModel.isLoadingNextPage,
+                    paginationErrorMessage: viewModel.paginationErrorMessage,
+                    canLoadMore: viewModel.canLoadMore,
+                    onRetry: { Task { await viewModel.loadNextPage() } },
+                    onLoadMore: { Task { await viewModel.loadNextPage() } }
+                )
             }
             .listStyle(.plain)
             .refreshable { await viewModel.load() }
-        }
-    }
-    
-    @ViewBuilder
-    private var paginationFooter: some View {
-        if viewModel.isLoadingNextPage {
-            HStack {
-                Spacer()
-                ProgressView()
-                Spacer()
-            }
-            .padding(.vertical, 12)
-        } else if let error = viewModel.paginationErrorMessage {
-            VStack(spacing: 8) {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Try Again") {
-                    Task { await viewModel.loadNextPage() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-        } else if viewModel.canLoadMore {
-            HStack {
-                Spacer()
-                Button("Load More") {
-                    Task { await viewModel.loadNextPage() }
-                }
-                .buttonStyle(.bordered)
-                Spacer()
-            }
-            .padding(.vertical, 8)
         }
     }
     
