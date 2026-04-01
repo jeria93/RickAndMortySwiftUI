@@ -340,6 +340,104 @@ final class RMServiceTests: XCTestCase {
         XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/character/1")
     }
 
+    func testFetchCharactersByIDs_whenMultipleIDs_decodesArrayAndPreservesRequestedOrder() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character/2,1")
+        let payload = """
+        [
+          {
+            "id": 1,
+            "name": "Rick Sanchez",
+            "image": "https://rickandmortyapi.com/api/character/avatar/1.jpeg"
+          },
+          {
+            "id": 2,
+            "name": "Morty Smith",
+            "image": "https://rickandmortyapi.com/api/character/avatar/2.jpeg"
+          }
+        ]
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let characters = try await sut.fetchCharacters(ids: [2, 1, 2, 0, -3])
+
+        XCTAssertEqual(characters.map(\.id), [2, 1])
+        XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/character/2,1")
+    }
+
+    func testFetchCharactersByIDs_whenSingleID_decodesSingleObject() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character/7")
+        let payload = """
+        {
+          "id": 7,
+          "name": "Abradolf Lincler",
+          "image": "https://rickandmortyapi.com/api/character/avatar/7.jpeg"
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let characters = try await sut.fetchCharacters(ids: [7])
+
+        XCTAssertEqual(characters.map(\.id), [7])
+        XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/character/7")
+    }
+
+    func testFetchCharactersByIDs_whenAllIDsInvalid_returnsEmptyWithoutNetworkCall() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let characters = try await sut.fetchCharacters(ids: [0, -4, 0])
+
+        XCTAssertTrue(characters.isEmpty)
+        XCTAssertNil(URLProtocolStub.lastRequestURL)
+    }
+
+    func testFetchCharactersByIDs_whenHTTP404_mapsHTTPStatusError() async {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character/404")
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: Data(), response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        do {
+            _ = try await sut.fetchCharacters(ids: [404])
+            XCTFail("Expected fetchCharacters(ids:) to throw")
+        } catch let error as RMServiceError {
+            guard case .httpStatus(let code) = error else {
+                XCTFail("Unexpected RMServiceError: \(error)")
+                return
+            }
+            XCTAssertEqual(code, 404)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
     func testFetchCharacterDetail_whenHTTP404_mapsHTTPStatusError() async {
         let baseURL = URL(string: "https://rickandmortyapi.com/api")!
         let endpointURL = baseURL.appending(path: "character/404")

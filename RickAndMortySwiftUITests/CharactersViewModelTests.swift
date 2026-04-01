@@ -842,6 +842,34 @@ final class CharacterDetailRepositoryTests: XCTestCase {
     }
 }
 
+final class CharacterLookupRepositoryTests: XCTestCase {
+
+    func testMockFetchByIDs_returnsCharactersInRequestedOrder() async throws {
+        let characterOne = Characters(id: 1, name: "Rick Sanchez", image: nil)
+        let characterTwo = Characters(id: 2, name: "Morty Smith", image: nil)
+        let repository = CharacterLookupRepository.mock(
+            charactersByID: [
+                1: characterOne,
+                2: characterTwo
+            ]
+        )
+
+        let result = try await repository.fetchByIDs([2, 1, 2, 0, -3])
+
+        XCTAssertEqual(result.map(\.id), [2, 1])
+    }
+
+    func testMockFetchByIDs_whenNoValidIDs_returnsEmptyWithoutErrors() async throws {
+        let repository = CharacterLookupRepository.mock(
+            charactersByID: [1: Characters(id: 1, name: "Rick Sanchez", image: nil)]
+        )
+
+        let result = try await repository.fetchByIDs([0, -1, 0])
+
+        XCTAssertTrue(result.isEmpty)
+    }
+}
+
 @MainActor
 final class LocationSearchViewModelTests: XCTestCase {
 
