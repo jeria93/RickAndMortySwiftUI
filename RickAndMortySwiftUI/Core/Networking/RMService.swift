@@ -7,40 +7,92 @@
 
 import Foundation
 
+enum RMServiceError: LocalizedError {
+    case badBaseURL
+    case transport(URLError)
+    case invalidResponse
+    case httpStatus(Int)
+    case decoding(DecodingError)
+    case unexpected(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .badBaseURL:
+            "Invalid API base URL."
+        case .transport(let error):
+            error.localizedDescription
+        case .invalidResponse:
+            "Invalid server response."
+        case .httpStatus(let statusCode):
+            "Server returned HTTP \(statusCode)."
+        case .decoding:
+            "Failed to decode server response."
+        case .unexpected(let error):
+            error.localizedDescription
+        }
+    }
+}
+
 /// Minimal client for the Rick & Morty API.
 /// Only implements a single endpoint for this demo:
 /// `GET /api/character` (first page).
 struct RMService {
     /// Base URL for all requests. Optional so we can validate it at runtime.
-    private let base = URL(string: "https://rickandmortyapi.com/api")
+    private let base: URL?
+    private let session: URLSession
+    private let decoder: JSONDecoder
+
+    init(
+        base: URL? = URL(string: "https://rickandmortyapi.com/api"),
+        session: URLSession = .shared,
+        decoder: JSONDecoder = JSONDecoder()
+    ) {
+        self.base = base
+        self.session = session
+        self.decoder = decoder
+    }
 
     /// Fetches the first page of characters.
     ///
     /// - Returns: An array of `Characters` decoded from the API.
-    /// - Throws: `URLError` if the URL is bad or the server response is not 2xx,
-    ///           or a decoding error if the payload does not match `CharactersResponse`.
+    /// - Throws: `RMServiceError` for URL, transport, response and decoding failures.
     func fetchCharacters() async throws -> [Characters] {
         // Make sure base URL exists
         guard let base else {
-            throw URLError(.badURL)
+            throw RMServiceError.badBaseURL
         }
 
         // Build endpoint: /api/character
         let url = base.appending(path: "character")
 
         // Perform request
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let data: Data
+        let response: URLResponse
+
+        do {
+            (data, response) = try await session.data(from: url)
+        } catch let error as URLError {
+            throw RMServiceError.transport(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
 
         // Validate HTTP status 2xx
-        guard
-            let http = response as? HTTPURLResponse,
-            (200...299).contains(http.statusCode)
-        else {
-            throw URLError(.badServerResponse)
+        guard let http = response as? HTTPURLResponse else {
+            throw RMServiceError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
         }
 
         // Decode only the `results` array
-        let decoded = try JSONDecoder().decode(CharactersResponse.self, from: data)
-        return decoded.results
+        do {
+            let decoded = try decoder.decode(CharactersResponse.self, from: data)
+            return decoded.results
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
     }
 }
