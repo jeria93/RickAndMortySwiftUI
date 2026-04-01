@@ -18,6 +18,7 @@ struct EpisodeCatalogView: View {
     
     var body: some View {
         content
+            .rmScreenBackground()
             .navigationTitle("Episodes")
             .searchable(text: nameFilterBinding, prompt: "Search episodes")
             .toolbar {
@@ -75,11 +76,15 @@ struct EpisodeCatalogView: View {
                             .foregroundStyle(.secondary)
                         Text(episode.airDate)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.portalCyan.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .rmCardStyle(cornerRadius: 12)
                     .contentShape(Rectangle())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
                 
                 CatalogPaginationFooter(
@@ -89,8 +94,11 @@ struct EpisodeCatalogView: View {
                     onRetry: { Task { await viewModel.loadNextPage() } },
                     onLoadMore: { Task { await viewModel.loadNextPage() } }
                 )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .refreshable { await viewModel.load() }
         }
     }

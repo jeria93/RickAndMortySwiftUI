@@ -53,6 +53,7 @@ struct CatalogEmptyStateView: View {
                     systemImage: systemImage,
                     description: Text(hasActiveQuery ? matchingMessage : emptyMessage)
                 )
+                .foregroundStyle(AppTheme.portalCyan)
 
                 if hasActiveQuery {
                     Button(clearButtonTitle, action: onClearFilters)
@@ -64,9 +65,13 @@ struct CatalogEmptyStateView: View {
                         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .rmCardStyle(cornerRadius: 18)
             .frame(maxWidth: 520)
             .padding(.horizontal, 24)
             .padding(.vertical, 32)
         }
+        .rmScreenBackground()
     }
 }

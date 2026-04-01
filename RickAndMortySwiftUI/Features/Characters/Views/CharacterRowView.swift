@@ -26,16 +26,26 @@ struct CharacterRowView: View {
                         .resizable()
                         .scaledToFit()
                         .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(AppTheme.portalCyan)
                 }
             }
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(AppTheme.cardStroke, lineWidth: 1)
+            }
             
             Text(name)
-                .font(.headline)
+                .font(.headline.weight(.semibold))
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
         .contentShape(Rectangle())
     }
 }

@@ -19,6 +19,7 @@ struct LocationCatalogView: View {
 
     var body: some View {
         content
+            .rmScreenBackground()
             .navigationTitle("Locations")
             .searchable(text: nameFilterBinding, prompt: "Search locations")
             .toolbar {
@@ -77,11 +78,15 @@ struct LocationCatalogView: View {
                             .foregroundStyle(.secondary)
                         Text(location.dimension.isEmpty ? "Unknown dimension" : location.dimension)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.portalCyan.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .rmCardStyle(cornerRadius: 12)
                     .contentShape(Rectangle())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
 
                 CatalogPaginationFooter(
@@ -91,8 +96,11 @@ struct LocationCatalogView: View {
                     onRetry: { Task { await viewModel.loadNextPage() } },
                     onLoadMore: { Task { await viewModel.loadNextPage() } }
                 )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .refreshable { await viewModel.load() }
         }
     }

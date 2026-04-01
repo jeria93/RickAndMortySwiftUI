@@ -13,6 +13,7 @@ struct LoadingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
+                .tint(AppTheme.portalGreen)
 
             if let message, !message.isEmpty {
                 Text(message)
@@ -20,7 +21,12 @@ struct LoadingView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .rmCardStyle(cornerRadius: 14)
+        .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .rmScreenBackground()
     }
 }
 
