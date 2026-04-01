@@ -20,14 +20,14 @@ final class CharactersViewModel: ObservableObject {
     @Published private(set) var genderFilter: CharacterGenderFilter = .any
     @Published private(set) var speciesFilter: String = ""
     @Published private(set) var typeFilter: String = ""
-    
+
     private let repository: CharactersRepository
     private let debounceNanoseconds: UInt64
     private var latestLoadID: UInt64 = 0
     private var nextPage: Int? = 1
     private var currentQuery: CharactersQuery = .init()
     private var debouncedReloadTask: Task<Void, Never>?
-    
+
     init(
         repository: CharactersRepository,
         debounceNanoseconds: UInt64 = 350_000_000
@@ -35,22 +35,22 @@ final class CharactersViewModel: ObservableObject {
         self.repository = repository
         self.debounceNanoseconds = debounceNanoseconds
     }
-    
+
     static func mock() -> Self { .init(repository: .mock()) }
     static func live() -> Self { .init(repository: .live()) }
-    
+
     var hasActiveQuery: Bool {
         !currentQuery.isEmpty
     }
-    
+
     var canLoadMore: Bool {
         nextPage != nil
     }
-    
+
     func load() async {
         debouncedReloadTask?.cancel()
         debouncedReloadTask = nil
-        
+
         latestLoadID += 1
         let loadID = latestLoadID
         isLoading = true
@@ -58,7 +58,7 @@ final class CharactersViewModel: ObservableObject {
         errorMessage = nil
         paginationErrorMessage = nil
         nextPage = 1
-        
+
         do {
             let firstPage = try await repository.fetch(1, currentQuery)
             finishInitialLoad(loadID, page: firstPage)
@@ -68,20 +68,20 @@ final class CharactersViewModel: ObservableObject {
             finishInitialLoad(loadID, errorMessage: error.localizedDescription)
         }
     }
-    
+
     func loadNextPageIfNeeded(currentCharacter: Characters) async {
         guard shouldLoadNextPage(for: currentCharacter) else { return }
         await loadNextPage()
     }
-    
+
     func loadNextPage() async {
         guard !isLoading, !isLoadingNextPage else { return }
         guard let pageToLoad = nextPage else { return }
-        
+
         let loadID = latestLoadID
         isLoadingNextPage = true
         paginationErrorMessage = nil
-        
+
         do {
             let page = try await repository.fetch(pageToLoad, currentQuery)
             finishNextPageLoad(loadID, page: page)
@@ -94,37 +94,37 @@ final class CharactersViewModel: ObservableObject {
             )
         }
     }
-    
+
     func updateSearchText(_ text: String) {
         guard searchText != text else { return }
         searchText = text
         scheduleReloadForQueryChange()
     }
-    
+
     func updateStatusFilter(_ status: CharacterStatusFilter) {
         guard statusFilter != status else { return }
         statusFilter = status
         scheduleReloadForQueryChange()
     }
-    
+
     func updateGenderFilter(_ gender: CharacterGenderFilter) {
         guard genderFilter != gender else { return }
         genderFilter = gender
         scheduleReloadForQueryChange()
     }
-    
+
     func updateSpeciesFilter(_ species: String) {
         guard speciesFilter != species else { return }
         speciesFilter = species
         scheduleReloadForQueryChange()
     }
-    
+
     func updateTypeFilter(_ type: String) {
         guard typeFilter != type else { return }
         typeFilter = type
         scheduleReloadForQueryChange()
     }
-    
+
     func clearSearchAndFilters() {
         searchText = ""
         statusFilter = .any
@@ -133,7 +133,7 @@ final class CharactersViewModel: ObservableObject {
         typeFilter = ""
         scheduleReloadForQueryChange()
     }
-    
+
     private func scheduleReloadForQueryChange() {
         let nextQuery = CharactersQuery(
             name: searchText,
@@ -142,24 +142,24 @@ final class CharactersViewModel: ObservableObject {
             species: speciesFilter,
             type: typeFilter
         )
-        
+
         guard nextQuery != currentQuery else { return }
         currentQuery = nextQuery
-        
+
         debouncedReloadTask?.cancel()
         debouncedReloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             if self.debounceNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
             }
-            
+
             guard !Task.isCancelled else { return }
             self.debouncedReloadTask = nil
             await self.load()
         }
     }
-    
+
     private func shouldLoadNextPage(for currentCharacter: Characters) -> Bool {
         guard !isLoading, !isLoadingNextPage else { return false }
         guard paginationErrorMessage == nil else { return false }
@@ -167,50 +167,50 @@ final class CharactersViewModel: ObservableObject {
         guard let currentIndex = characters.firstIndex(where: { $0.id == currentCharacter.id }) else {
             return false
         }
-        
+
         let thresholdIndex = max(characters.count - 5, 0)
         return currentIndex >= thresholdIndex
     }
-    
+
     private func finishInitialLoad(
         _ loadID: UInt64,
         page: CharactersPage? = nil,
         errorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             characters = page.characters
             nextPage = page.nextPage
         }
-        
+
         self.errorMessage = errorMessage
         isLoading = false
         isLoadingNextPage = false
     }
-    
+
     private func finishNextPageLoad(
         _ loadID: UInt64,
         page: CharactersPage? = nil,
         paginationErrorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             appendUniqueCharacters(page.characters)
             nextPage = page.nextPage
         }
-        
+
         self.paginationErrorMessage = paginationErrorMessage
         isLoadingNextPage = false
     }
-    
+
     private func appendUniqueCharacters(_ newCharacters: [Characters]) {
         var ids = Set(characters.map(\.id))
         let unique = newCharacters.filter { ids.insert($0.id).inserted }
         characters.append(contentsOf: unique)
     }
-    
+
     func dismissError() { errorMessage = nil }
     func dismissPaginationError() { paginationErrorMessage = nil }
 }
@@ -260,20 +260,20 @@ final class CharacterDetailViewModel: ObservableObject {
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var episodeWarningMessage: String?
-    
+
     private let characterID: Int
     private let repository: CharacterDetailRepository
     private var latestLoadID: UInt64 = 0
-    
+
     init(characterID: Int, repository: CharacterDetailRepository) {
         self.characterID = characterID
         self.repository = repository
     }
-    
+
     static func live(characterID: Int) -> Self {
         .init(characterID: characterID, repository: .live())
     }
-    
+
     static func preview() -> Self {
         let previewDetail = CharacterDetail.preview()
         let previewEpisodes = Episode.previewList()
@@ -283,19 +283,19 @@ final class CharacterDetailViewModel: ObservableObject {
         )
         ._previewInject(detail: previewDetail, episodes: previewEpisodes)
     }
-    
+
     func load() async {
         latestLoadID += 1
         let loadID = latestLoadID
         isLoading = true
         errorMessage = nil
         episodeWarningMessage = nil
-        
+
         do {
             let detail = try await repository.fetchDetail(characterID)
             let episodeIDs = uniqueEpisodeIDs(from: detail.episode)
             let fetchedEpisodes: [Episode]
-            
+
             do {
                 fetchedEpisodes = try await fetchEpisodesIfNeeded(episodeIDs)
             } catch is CancellationError {
@@ -310,7 +310,7 @@ final class CharacterDetailViewModel: ObservableObject {
                 )
                 return
             }
-            
+
             let orderedEpisodes = orderEpisodes(
                 fetchedEpisodes,
                 using: episodeIDs
@@ -322,26 +322,26 @@ final class CharacterDetailViewModel: ObservableObject {
             finishLoad(loadID, errorMessage: error.localizedDescription)
         }
     }
-    
+
     private func fetchEpisodesIfNeeded(_ ids: [Int]) async throws -> [Episode] {
         guard !ids.isEmpty else { return [] }
         return try await repository.fetchEpisodes(ids)
     }
-    
+
     private func uniqueEpisodeIDs(from urls: [URL]) -> [Int] {
         var seen = Set<Int>()
         var ids: [Int] = []
-        
+
         for url in urls {
             guard let id = url.resourceID else { continue }
             if seen.insert(id).inserted {
                 ids.append(id)
             }
         }
-        
+
         return ids
     }
-    
+
     private func orderEpisodes(_ episodes: [Episode], using orderedIDs: [Int]) -> [Episode] {
         let rank = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($1, $0) })
         return episodes.sorted { lhs, rhs in
@@ -350,7 +350,7 @@ final class CharacterDetailViewModel: ObservableObject {
             return leftRank < rightRank
         }
     }
-    
+
     private func finishLoad(
         _ loadID: UInt64,
         detail: CharacterDetail? = nil,
@@ -359,20 +359,20 @@ final class CharacterDetailViewModel: ObservableObject {
         episodeWarningMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let detail {
             self.detail = detail
         }
-        
+
         if let episodes {
             self.episodes = episodes
         }
-        
+
         self.errorMessage = errorMessage
         self.episodeWarningMessage = episodeWarningMessage
         isLoading = false
     }
-    
+
     func dismissError() { errorMessage = nil }
 }
 
@@ -401,14 +401,14 @@ final class LocationSearchViewModel: ObservableObject {
     @Published private(set) var nameFilter: String = ""
     @Published private(set) var typeFilter: String = ""
     @Published private(set) var dimensionFilter: String = ""
-    
+
     private let repository: LocationRepository
     private let debounceNanoseconds: UInt64
     private var latestLoadID: UInt64 = 0
     private var nextPage: Int? = 1
     private var currentQuery: LocationQuery = .init()
     private var debouncedReloadTask: Task<Void, Never>?
-    
+
     init(
         repository: LocationRepository,
         debounceNanoseconds: UInt64 = 350_000_000
@@ -416,22 +416,22 @@ final class LocationSearchViewModel: ObservableObject {
         self.repository = repository
         self.debounceNanoseconds = debounceNanoseconds
     }
-    
+
     static func live() -> Self { .init(repository: .live()) }
     static func mock() -> Self { .init(repository: .mock()) }
-    
+
     var hasActiveQuery: Bool {
         !currentQuery.isEmpty
     }
-    
+
     var canLoadMore: Bool {
         nextPage != nil
     }
-    
+
     func load() async {
         debouncedReloadTask?.cancel()
         debouncedReloadTask = nil
-        
+
         latestLoadID += 1
         let loadID = latestLoadID
         isLoading = true
@@ -439,7 +439,7 @@ final class LocationSearchViewModel: ObservableObject {
         errorMessage = nil
         paginationErrorMessage = nil
         nextPage = 1
-        
+
         do {
             let firstPage = try await repository.fetch(1, currentQuery)
             finishInitialLoad(loadID, page: firstPage)
@@ -449,15 +449,15 @@ final class LocationSearchViewModel: ObservableObject {
             finishInitialLoad(loadID, errorMessage: error.localizedDescription)
         }
     }
-    
+
     func loadNextPage() async {
         guard !isLoading, !isLoadingNextPage else { return }
         guard let pageToLoad = nextPage else { return }
-        
+
         let loadID = latestLoadID
         isLoadingNextPage = true
         paginationErrorMessage = nil
-        
+
         do {
             let page = try await repository.fetch(pageToLoad, currentQuery)
             finishNextPageLoad(loadID, page: page)
@@ -470,95 +470,95 @@ final class LocationSearchViewModel: ObservableObject {
             )
         }
     }
-    
+
     func updateNameFilter(_ name: String) {
         guard nameFilter != name else { return }
         nameFilter = name
         scheduleReloadForQueryChange()
     }
-    
+
     func updateTypeFilter(_ type: String) {
         guard typeFilter != type else { return }
         typeFilter = type
         scheduleReloadForQueryChange()
     }
-    
+
     func updateDimensionFilter(_ dimension: String) {
         guard dimensionFilter != dimension else { return }
         dimensionFilter = dimension
         scheduleReloadForQueryChange()
     }
-    
+
     func clearFilters() {
         nameFilter = ""
         typeFilter = ""
         dimensionFilter = ""
         scheduleReloadForQueryChange()
     }
-    
+
     private func scheduleReloadForQueryChange() {
         let nextQuery = LocationQuery(
             name: nameFilter,
             type: typeFilter,
             dimension: dimensionFilter
         )
-        
+
         guard nextQuery != currentQuery else { return }
         currentQuery = nextQuery
-        
+
         debouncedReloadTask?.cancel()
         debouncedReloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             if self.debounceNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
             }
-            
+
             guard !Task.isCancelled else { return }
             self.debouncedReloadTask = nil
             await self.load()
         }
     }
-    
+
     private func finishInitialLoad(
         _ loadID: UInt64,
         page: LocationsPage? = nil,
         errorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             locations = page.locations
             nextPage = page.nextPage
         }
-        
+
         self.errorMessage = errorMessage
         isLoading = false
         isLoadingNextPage = false
     }
-    
+
     private func finishNextPageLoad(
         _ loadID: UInt64,
         page: LocationsPage? = nil,
         paginationErrorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             appendUniqueLocations(page.locations)
             nextPage = page.nextPage
         }
-        
+
         self.paginationErrorMessage = paginationErrorMessage
         isLoadingNextPage = false
     }
-    
+
     private func appendUniqueLocations(_ newLocations: [Location]) {
         var ids = Set(locations.map(\.id))
         let unique = newLocations.filter { ids.insert($0.id).inserted }
         locations.append(contentsOf: unique)
     }
-    
+
     func dismissError() { errorMessage = nil }
     func dismissPaginationError() { paginationErrorMessage = nil }
 }
@@ -572,14 +572,14 @@ final class EpisodeCatalogViewModel: ObservableObject {
     @Published private(set) var paginationErrorMessage: String?
     @Published private(set) var nameFilter: String = ""
     @Published private(set) var episodeFilter: String = ""
-    
+
     private let repository: EpisodeCatalogRepository
     private let debounceNanoseconds: UInt64
     private var latestLoadID: UInt64 = 0
     private var nextPage: Int? = 1
     private var currentQuery: EpisodeListQuery = .init()
     private var debouncedReloadTask: Task<Void, Never>?
-    
+
     init(
         repository: EpisodeCatalogRepository,
         debounceNanoseconds: UInt64 = 350_000_000
@@ -587,22 +587,22 @@ final class EpisodeCatalogViewModel: ObservableObject {
         self.repository = repository
         self.debounceNanoseconds = debounceNanoseconds
     }
-    
+
     static func live() -> Self { .init(repository: .live()) }
     static func mock() -> Self { .init(repository: .mock()) }
-    
+
     var hasActiveQuery: Bool {
         !currentQuery.isEmpty
     }
-    
+
     var canLoadMore: Bool {
         nextPage != nil
     }
-    
+
     func load() async {
         debouncedReloadTask?.cancel()
         debouncedReloadTask = nil
-        
+
         latestLoadID += 1
         let loadID = latestLoadID
         isLoading = true
@@ -610,7 +610,7 @@ final class EpisodeCatalogViewModel: ObservableObject {
         errorMessage = nil
         paginationErrorMessage = nil
         nextPage = 1
-        
+
         do {
             let firstPage = try await repository.fetch(1, currentQuery)
             finishInitialLoad(loadID, page: firstPage)
@@ -620,15 +620,15 @@ final class EpisodeCatalogViewModel: ObservableObject {
             finishInitialLoad(loadID, errorMessage: error.localizedDescription)
         }
     }
-    
+
     func loadNextPage() async {
         guard !isLoading, !isLoadingNextPage else { return }
         guard let pageToLoad = nextPage else { return }
-        
+
         let loadID = latestLoadID
         isLoadingNextPage = true
         paginationErrorMessage = nil
-        
+
         do {
             let page = try await repository.fetch(pageToLoad, currentQuery)
             finishNextPageLoad(loadID, page: page)
@@ -641,87 +641,87 @@ final class EpisodeCatalogViewModel: ObservableObject {
             )
         }
     }
-    
+
     func updateNameFilter(_ name: String) {
         guard nameFilter != name else { return }
         nameFilter = name
         scheduleReloadForQueryChange()
     }
-    
+
     func updateEpisodeFilter(_ episode: String) {
         guard episodeFilter != episode else { return }
         episodeFilter = episode
         scheduleReloadForQueryChange()
     }
-    
+
     func clearFilters() {
         nameFilter = ""
         episodeFilter = ""
         scheduleReloadForQueryChange()
     }
-    
+
     private func scheduleReloadForQueryChange() {
         let nextQuery = EpisodeListQuery(
             name: nameFilter,
             episode: episodeFilter
         )
-        
+
         guard nextQuery != currentQuery else { return }
         currentQuery = nextQuery
-        
+
         debouncedReloadTask?.cancel()
         debouncedReloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            
+
             if self.debounceNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
             }
-            
+
             guard !Task.isCancelled else { return }
             self.debouncedReloadTask = nil
             await self.load()
         }
     }
-    
+
     private func finishInitialLoad(
         _ loadID: UInt64,
         page: EpisodesPage? = nil,
         errorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             episodes = page.episodes
             nextPage = page.nextPage
         }
-        
+
         self.errorMessage = errorMessage
         isLoading = false
         isLoadingNextPage = false
     }
-    
+
     private func finishNextPageLoad(
         _ loadID: UInt64,
         page: EpisodesPage? = nil,
         paginationErrorMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let page {
             appendUniqueEpisodes(page.episodes)
             nextPage = page.nextPage
         }
-        
+
         self.paginationErrorMessage = paginationErrorMessage
         isLoadingNextPage = false
     }
-    
+
     private func appendUniqueEpisodes(_ newEpisodes: [Episode]) {
         var ids = Set(episodes.map(\.id))
         let unique = newEpisodes.filter { ids.insert($0.id).inserted }
         episodes.append(contentsOf: unique)
     }
-    
+
     func dismissError() { errorMessage = nil }
     func dismissPaginationError() { paginationErrorMessage = nil }
 }

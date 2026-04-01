@@ -11,7 +11,7 @@ struct EpisodeCatalogFilterSheet: View {
     @Binding var episodeCodeDraft: String
     let onCancel: () -> Void
     let onApply: () -> Void
-    
+
     var body: some View {
         NavigationStack {
             Form {

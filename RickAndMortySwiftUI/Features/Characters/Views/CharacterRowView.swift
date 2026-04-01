@@ -36,7 +36,8 @@ struct CharacterRowView: View {
             Text(name)
                 .font(.headline)
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
     }
 }
