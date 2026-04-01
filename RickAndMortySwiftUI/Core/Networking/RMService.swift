@@ -14,7 +14,7 @@ enum RMServiceError: LocalizedError {
     case httpStatus(Int)
     case decoding(DecodingError)
     case unexpected(Error)
-
+    
     var errorDescription: String? {
         switch self {
         case .badBaseURL:
@@ -41,7 +41,7 @@ struct RMService {
     private let base: URL?
     private let session: URLSession
     private let decoder: JSONDecoder
-
+    
     init(
         base: URL? = URL(string: "https://rickandmortyapi.com/api"),
         session: URLSession = .shared,
@@ -51,7 +51,7 @@ struct RMService {
         self.session = session
         self.decoder = decoder
     }
-
+    
     /// Fetches a page of characters.
     ///
     /// - Parameter page: Page index (1-based).
@@ -62,11 +62,8 @@ struct RMService {
         page: Int,
         query: CharactersQuery = .init()
     ) async throws -> CharactersPage {
-        // Make sure base URL exists
-        guard let base else {
-            throw RMServiceError.badBaseURL
-        }
-
+        let base = try baseURL()
+        
         // Build endpoint: /api/character?page=n
         var components = URLComponents(
             url: base.appending(path: "character"),
@@ -74,33 +71,18 @@ struct RMService {
         )
         components?.queryItems = makeQueryItems(page: page, query: query)
         let url = components?.url ?? base.appending(path: "character")
-
-        // Perform request
-        let data: Data
-        let response: URLResponse
-
-        do {
-            (data, response) = try await session.data(from: url)
-        } catch let error as URLError {
-            throw RMServiceError.transport(error)
-        } catch {
-            throw RMServiceError.unexpected(error)
-        }
-
-        // Validate HTTP status 2xx
-        guard let http = response as? HTTPURLResponse else {
-            throw RMServiceError.invalidResponse
-        }
-
+        
+        let (data, http) = try await requestData(from: url)
+        
         // For filtered searches, 404 means "no matches", not a hard error.
         if http.statusCode == 404, !query.isEmpty {
             return CharactersPage(characters: [], nextPage: nil)
         }
-
+        
         guard (200...299).contains(http.statusCode) else {
             throw RMServiceError.httpStatus(http.statusCode)
         }
-
+        
         // Decode only the `results` array
         do {
             let decoded = try decoder.decode(CharactersResponse.self, from: data)
@@ -112,31 +94,73 @@ struct RMService {
             throw RMServiceError.unexpected(error)
         }
     }
-
+    
     /// Backward-compatible helper for callers that only need first-page results.
     func fetchCharacters() async throws -> [Characters] {
         let page = try await fetchCharacters(page: 1, query: .init())
         return page.characters
     }
     
+    func fetchCharacterDetail(id: Int) async throws -> CharacterDetail {
+        let base = try baseURL()
+        let url = base.appending(path: "character/\(id)")
+        let (data, http) = try await requestData(from: url)
+        
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+        
+        do {
+            return try decoder.decode(CharacterDetail.self, from: data)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+    
+    func fetchEpisodes(ids: [Int]) async throws -> [Episode] {
+        let uniqueIDs = uniquePositiveIDs(ids)
+        guard !uniqueIDs.isEmpty else { return [] }
+        
+        let base = try baseURL()
+        let joined = uniqueIDs.map(String.init).joined(separator: ",")
+        let url = base.appending(path: "episode/\(joined)")
+        let (data, http) = try await requestData(from: url)
+        
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+        
+        do {
+            let decoded = try decoder.decode(RMSingleOrMany<Episode>.self, from: data)
+            let episodes = decoded.array
+            return sortEpisodes(episodes, by: uniqueIDs)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+    
     private func makeQueryItems(page: Int, query: CharactersQuery) -> [URLQueryItem] {
         var queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
-
+        
         if !query.trimmedName.isEmpty {
             queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))
         }
-
+        
         if let status = query.status.apiValue {
             queryItems.append(URLQueryItem(name: "status", value: status))
         }
-
+        
         if let gender = query.gender.apiValue {
             queryItems.append(URLQueryItem(name: "gender", value: gender))
         }
-
+        
         return queryItems
     }
-
+    
     private func nextPageNumber(from nextURLString: String?) -> Int? {
         guard
             let nextURLString,
@@ -148,7 +172,79 @@ struct RMService {
         else {
             return nil
         }
-
+        
         return page
+    }
+    
+    private func uniquePositiveIDs(_ ids: [Int]) -> [Int] {
+        var seen = Set<Int>()
+        var unique: [Int] = []
+        
+        for id in ids where id > 0 {
+            if seen.insert(id).inserted {
+                unique.append(id)
+            }
+        }
+        
+        return unique
+    }
+    
+    private func sortEpisodes(_ episodes: [Episode], by orderedIDs: [Int]) -> [Episode] {
+        let rank = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($1, $0) })
+        return episodes.sorted { lhs, rhs in
+            let leftRank = rank[lhs.id] ?? Int.max
+            let rightRank = rank[rhs.id] ?? Int.max
+            return leftRank < rightRank
+        }
+    }
+    
+    private func requestData(from url: URL) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
+        
+        do {
+            (data, response) = try await session.data(from: url)
+        } catch let error as URLError {
+            throw RMServiceError.transport(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+        
+        guard let http = response as? HTTPURLResponse else {
+            throw RMServiceError.invalidResponse
+        }
+        
+        return (data, http)
+    }
+    
+    private func baseURL() throws -> URL {
+        guard let base else {
+            throw RMServiceError.badBaseURL
+        }
+        
+        return base
+    }
+}
+
+private enum RMSingleOrMany<T: Decodable>: Decodable {
+    case single(T)
+    case many([T])
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let many = try? container.decode([T].self) {
+            self = .many(many)
+        } else {
+            self = .single(try container.decode(T.self))
+        }
+    }
+    
+    var array: [T] {
+        switch self {
+        case .single(let value):
+            [value]
+        case .many(let values):
+            values
+        }
     }
 }
