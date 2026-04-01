@@ -400,6 +400,45 @@ struct LocationRepository {
     }
 }
 
+/// Repository for location batch lookups.
+struct LocationLookupRepository {
+    let fetchByIDs: (_ ids: [Int]) async throws -> [Location]
+
+    static func live() -> LocationLookupRepository {
+        let service = LiveRMService.shared
+        return .init(
+            fetchByIDs: { ids in
+                try await service.fetchLocations(ids: ids)
+            }
+        )
+    }
+
+    static func mock(
+        locationsByID: [Int: Location] = [:]
+    ) -> LocationLookupRepository {
+        .init(
+            fetchByIDs: { ids in
+                let normalizedIDs = uniquePositiveIDs(ids)
+                guard !normalizedIDs.isEmpty else { return [] }
+                return normalizedIDs.compactMap { locationsByID[$0] }
+            }
+        )
+    }
+
+    private static func uniquePositiveIDs(_ ids: [Int]) -> [Int] {
+        var seen = Set<Int>()
+        var unique: [Int] = []
+
+        for id in ids where id > 0 {
+            if seen.insert(id).inserted {
+                unique.append(id)
+            }
+        }
+
+        return unique
+    }
+}
+
 /// Repository for paginated/filterable episode list lookups.
 struct EpisodeCatalogRepository {
     let fetch: (_ page: Int, _ query: EpisodeListQuery) async throws -> EpisodesPage

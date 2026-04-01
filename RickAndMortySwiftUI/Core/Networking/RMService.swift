@@ -178,6 +178,30 @@ struct RMService {
             throw RMServiceError.unexpected(error)
         }
     }
+
+    func fetchLocations(ids: [Int]) async throws -> [Location] {
+        let uniqueIDs = uniquePositiveIDs(ids)
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let base = try baseURL()
+        let joined = uniqueIDs.map(String.init).joined(separator: ",")
+        let url = base.appending(path: "location/\(joined)")
+        let (data, http) = try await requestData(from: url)
+
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+
+        do {
+            let decoded = try decoder.decode(RMSingleOrMany<Location>.self, from: data)
+            let locations = decoded.array
+            return sortLocations(locations, by: uniqueIDs)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
     
     func fetchLocations(
         page: Int,
@@ -366,6 +390,10 @@ struct RMService {
 
     private func sortCharacters(_ characters: [Characters], by orderedIDs: [Int]) -> [Characters] {
         sortByRequestedIDs(characters, orderedIDs: orderedIDs, id: \.id)
+    }
+
+    private func sortLocations(_ locations: [Location], by orderedIDs: [Int]) -> [Location] {
+        sortByRequestedIDs(locations, orderedIDs: orderedIDs, id: \.id)
     }
 
     private func sortByRequestedIDs<T>(

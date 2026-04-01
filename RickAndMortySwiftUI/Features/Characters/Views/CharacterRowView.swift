@@ -13,9 +13,9 @@ struct CharacterRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: imageURL) { phase in
+            RemoteImageView(url: imageURL, maxRetryCount: 1) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ProgressView()
                 case .success(let image):
                     image
@@ -26,8 +26,6 @@ struct CharacterRowView: View {
                         .resizable()
                         .scaledToFit()
                         .symbolRenderingMode(.hierarchical)
-                @unknown default:
-                    Color.clear
                 }
             }
             .frame(width: 56, height: 56)

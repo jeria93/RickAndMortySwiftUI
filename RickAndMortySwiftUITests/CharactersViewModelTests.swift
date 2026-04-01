@@ -1083,6 +1083,45 @@ final class LocationRepositoryTests: XCTestCase {
     }
 }
 
+final class LocationLookupRepositoryTests: XCTestCase {
+
+    func testMockFetchByIDs_returnsLocationsInRequestedOrder() async throws {
+        let locationOne = makeLocation(id: 1, name: "Earth (C-137)")
+        let locationThree = makeLocation(id: 3, name: "Citadel of Ricks")
+        let repository = LocationLookupRepository.mock(
+            locationsByID: [
+                1: locationOne,
+                3: locationThree
+            ]
+        )
+
+        let result = try await repository.fetchByIDs([3, 1, 3, 0, -2])
+
+        XCTAssertEqual(result.map(\.id), [3, 1])
+    }
+
+    func testMockFetchByIDs_whenNoValidIDs_returnsEmptyWithoutErrors() async throws {
+        let repository = LocationLookupRepository.mock(
+            locationsByID: [1: makeLocation(id: 1, name: "Earth (C-137)")]
+        )
+
+        let result = try await repository.fetchByIDs([0, -1, 0])
+
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    private func makeLocation(id: Int, name: String) -> Location {
+        Location(
+            id: id,
+            name: name,
+            type: "Space station",
+            dimension: "unknown",
+            residents: [],
+            url: URL(string: "https://rickandmortyapi.com/api/location/\(id)")
+        )
+    }
+}
+
 final class EpisodeCatalogRepositoryTests: XCTestCase {
 
     func testMock_returnsConfiguredPage() async throws {

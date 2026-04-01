@@ -66,9 +66,9 @@ struct CharacterDetailView: View {
         let imageURL = viewModel.detail?.image ?? character.image
 
         return HStack(alignment: .center, spacing: 16) {
-            AsyncImage(url: imageURL) { phase in
+            RemoteImageView(url: imageURL, maxRetryCount: 1) { phase in
                 switch phase {
-                case .empty:
+                case .empty, .loading:
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(.quaternary)
@@ -86,8 +86,6 @@ struct CharacterDetailView: View {
                             .imageScale(.large)
                             .foregroundStyle(.secondary)
                     }
-                @unknown default:
-                    Color.clear
                 }
             }
             .frame(width: 110, height: 110)
