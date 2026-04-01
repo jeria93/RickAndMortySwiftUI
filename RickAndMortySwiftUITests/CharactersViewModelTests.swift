@@ -3,10 +3,10 @@ import XCTest
 
 @MainActor
 final class CharactersViewModelTests: XCTestCase {
-
+    
     func testLoad_whenRequestsOverlap_lastRequestWins() async {
         var continuations: [CheckedContinuation<CharactersPage, Error>] = []
-
+        
         let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
             XCTAssertTrue(query.isEmpty)
@@ -14,15 +14,15 @@ final class CharactersViewModelTests: XCTestCase {
                 continuations.append(continuation)
             }
         }
-
+        
         let sut = CharactersViewModel(repository: repository)
-
+        
         let firstTask = Task { await sut.load() }
         await Task.yield()
-
+        
         let secondTask = Task { await sut.load() }
         await Task.yield()
-
+        
         for _ in 0..<50 where continuations.count < 2 {
             await Task.yield()
         }
@@ -30,7 +30,7 @@ final class CharactersViewModelTests: XCTestCase {
         guard continuations.count == 2 else {
             return
         }
-
+        
         continuations[0].resume(
             returning: CharactersPage(
                 characters: [makeCharacter(id: 1, name: "First")],
@@ -38,25 +38,25 @@ final class CharactersViewModelTests: XCTestCase {
             )
         )
         await Task.yield()
-
+        
         XCTAssertTrue(sut.isLoading)
         XCTAssertTrue(sut.characters.isEmpty)
-
+        
         continuations[1].resume(
             returning: CharactersPage(
                 characters: [makeCharacter(id: 2, name: "Second")],
                 nextPage: nil
             )
         )
-
+        
         await firstTask.value
         await secondTask.value
-
+        
         XCTAssertFalse(sut.isLoading)
         XCTAssertNil(sut.errorMessage)
         XCTAssertEqual(sut.characters.map(\.id), [2])
     }
-
+    
     func testLoad_whenCancelled_doesNotSetErrorMessage() async {
         let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
@@ -67,56 +67,56 @@ final class CharactersViewModelTests: XCTestCase {
                 nextPage: nil
             )
         }
-
+        
         let sut = CharactersViewModel(repository: repository)
-
+        
         let task = Task { await sut.load() }
         await Task.yield()
-
+        
         task.cancel()
         await task.value
-
+        
         XCTAssertFalse(sut.isLoading)
         XCTAssertNil(sut.errorMessage)
     }
-
+    
     func testLoad_whenFailureThenSuccess_clearsErrorAndSetsCharacters() async {
         var callCount = 0
-
+        
         let repository = CharactersRepository { page, query in
             callCount += 1
             XCTAssertEqual(page, 1)
             XCTAssertTrue(query.isEmpty)
-
+            
             if callCount == 1 {
                 throw URLError(.timedOut)
             }
-
+            
             return CharactersPage(
                 characters: [self.makeCharacter(id: 7, name: "Summer")],
                 nextPage: nil
             )
         }
-
+        
         let sut = CharactersViewModel(repository: repository)
-
+        
         await sut.load()
         XCTAssertNotNil(sut.errorMessage)
-
+        
         await sut.load()
-
+        
         XCTAssertFalse(sut.isLoading)
         XCTAssertNil(sut.errorMessage)
         XCTAssertEqual(sut.characters.map(\.id), [7])
     }
-
+    
     func testLoadNextPage_whenLastVisibleCharacterReached_appendsNextPage() async {
         var calledPages: [Int] = []
-
+        
         let repository = CharactersRepository { page, query in
             calledPages.append(page)
             XCTAssertTrue(query.isEmpty)
-
+            
             switch page {
             case 1:
                 return CharactersPage(
@@ -136,22 +136,22 @@ final class CharactersViewModelTests: XCTestCase {
                 return CharactersPage(characters: [], nextPage: nil)
             }
         }
-
+        
         let sut = CharactersViewModel(repository: repository)
-
+        
         await sut.load()
         await sut.loadNextPageIfNeeded(currentCharacter: makeCharacter(id: 2, name: "Morty"))
-
+        
         XCTAssertEqual(calledPages, [1, 2])
         XCTAssertEqual(sut.characters.map(\.id), [1, 2, 3])
         XCTAssertFalse(sut.isLoadingNextPage)
         XCTAssertNil(sut.paginationErrorMessage)
     }
-
+    
     func testLoadNextPage_whenFailure_keepsExistingCharactersAndSetsPaginationError() async {
         let repository = CharactersRepository { page, query in
             XCTAssertTrue(query.isEmpty)
-
+            
             switch page {
             case 1:
                 return CharactersPage(
@@ -165,48 +165,97 @@ final class CharactersViewModelTests: XCTestCase {
                 return CharactersPage(characters: [], nextPage: nil)
             }
         }
-
+        
         let sut = CharactersViewModel(repository: repository)
-
+        
         await sut.load()
         await sut.loadNextPage()
-
+        
         XCTAssertEqual(sut.characters.map(\.id), [1])
         XCTAssertNotNil(sut.paginationErrorMessage)
         XCTAssertNil(sut.errorMessage)
         XCTAssertFalse(sut.isLoadingNextPage)
     }
-
+    
     func testQueryChange_debouncesAndSendsCombinedFilters() async {
         var calls: [(Int, CharactersQuery)] = []
-
+        
         let repository = CharactersRepository { page, query in
             calls.append((page, query))
             return CharactersPage(characters: [], nextPage: nil)
         }
-
+        
         let sut = CharactersViewModel(
             repository: repository,
             debounceNanoseconds: 120_000_000
         )
-
+        
         sut.updateSearchText("rick")
         sut.updateStatusFilter(.alive)
         sut.updateGenderFilter(.male)
-
+        sut.updateSpeciesFilter("Human")
+        sut.updateTypeFilter("Scientist")
+        
         try? await Task.sleep(nanoseconds: 350_000_000)
-
+        
         XCTAssertEqual(calls.count, 1)
         XCTAssertEqual(calls[0].0, 1)
-        XCTAssertEqual(calls[0].1, CharactersQuery(name: "rick", status: .alive, gender: .male))
+        XCTAssertEqual(
+            calls[0].1,
+            CharactersQuery(
+                name: "rick",
+                status: .alive,
+                gender: .male,
+                species: "Human",
+                type: "Scientist"
+            )
+        )
     }
-
-    func testQueryChange_resetsPaginationToFirstPage() async {
+    
+    func testClearSearchAndFilters_resetsSpeciesAndTypeAndReloadsDefaultQuery() async {
         var calls: [(Int, CharactersQuery)] = []
-
+        
         let repository = CharactersRepository { page, query in
             calls.append((page, query))
-
+            return CharactersPage(characters: [], nextPage: nil)
+        }
+        
+        let sut = CharactersViewModel(repository: repository, debounceNanoseconds: 0)
+        
+        sut.updateSearchText("rick")
+        sut.updateStatusFilter(.alive)
+        sut.updateGenderFilter(.male)
+        sut.updateSpeciesFilter("Human")
+        sut.updateTypeFilter("Scientist")
+        
+        for _ in 0..<100 where calls.count < 1 {
+            await Task.yield()
+        }
+        
+        XCTAssertTrue(sut.hasActiveQuery)
+        
+        sut.clearSearchAndFilters()
+        
+        for _ in 0..<100 where calls.count < 2 {
+            await Task.yield()
+        }
+        
+        XCTAssertEqual(sut.searchText, "")
+        XCTAssertEqual(sut.statusFilter, .any)
+        XCTAssertEqual(sut.genderFilter, .any)
+        XCTAssertEqual(sut.speciesFilter, "")
+        XCTAssertEqual(sut.typeFilter, "")
+        XCTAssertFalse(sut.hasActiveQuery)
+        XCTAssertEqual(calls.map(\.0), [1, 1])
+        XCTAssertEqual(calls.last?.1, CharactersQuery())
+    }
+    
+    func testQueryChange_resetsPaginationToFirstPage() async {
+        var calls: [(Int, CharactersQuery)] = []
+        
+        let repository = CharactersRepository { page, query in
+            calls.append((page, query))
+            
             if query.trimmedName.isEmpty {
                 switch page {
                 case 1:
@@ -224,7 +273,7 @@ final class CharactersViewModelTests: XCTestCase {
                     return CharactersPage(characters: [], nextPage: nil)
                 }
             }
-
+            
             if query.trimmedName == "rick" {
                 XCTAssertEqual(page, 1)
                 return CharactersPage(
@@ -232,32 +281,32 @@ final class CharactersViewModelTests: XCTestCase {
                     nextPage: nil
                 )
             }
-
+            
             XCTFail("Unexpected query: \(query)")
             return CharactersPage(characters: [], nextPage: nil)
         }
-
+        
         let sut = CharactersViewModel(repository: repository, debounceNanoseconds: 0)
-
+        
         await sut.load()
         await sut.loadNextPage()
         XCTAssertEqual(sut.characters.map(\.id), [1, 2])
-
+        
         sut.updateSearchText("rick")
-
+        
         for _ in 0..<100 where calls.count < 3 {
             await Task.yield()
         }
         for _ in 0..<100 where sut.isLoading {
             await Task.yield()
         }
-
+        
         XCTAssertEqual(calls.map(\.0), [1, 2, 1])
         XCTAssertEqual(calls[2].1.trimmedName, "rick")
         XCTAssertEqual(sut.characters.map(\.id), [10])
         XCTAssertTrue(sut.hasActiveQuery)
     }
-
+    
     func testQueryWithNoMatches_resultsInEmptyStateWithoutError() async {
         let repository = CharactersRepository { page, query in
             if query.trimmedName.isEmpty {
@@ -266,27 +315,27 @@ final class CharactersViewModelTests: XCTestCase {
                     nextPage: nil
                 )
             }
-
+            
             XCTAssertEqual(page, 1)
             XCTAssertEqual(query.trimmedName, "not-found")
             return CharactersPage(characters: [], nextPage: nil)
         }
-
+        
         let sut = CharactersViewModel(repository: repository, debounceNanoseconds: 0)
-
+        
         await sut.load()
         XCTAssertEqual(sut.characters.map(\.id), [1])
-
+        
         sut.updateSearchText("not-found")
-
+        
         for _ in 0..<100 where sut.isLoading {
             await Task.yield()
         }
-
+        
         XCTAssertTrue(sut.characters.isEmpty)
         XCTAssertNil(sut.errorMessage)
     }
-
+    
     private func makeCharacter(id: Int, name: String) -> Characters {
         Characters(id: id, name: name, image: nil)
     }
@@ -294,11 +343,11 @@ final class CharactersViewModelTests: XCTestCase {
 
 @MainActor
 final class CharacterDetailViewModelTests: XCTestCase {
-
+    
     func testLoad_success_fetchesDetailAndEpisodesInRequestedOrder() async {
         let detail = makeDetail(id: 1, episodeIDs: [1, 2, 3])
         var requestedEpisodeIDs: [Int] = []
-
+        
         let repository = CharacterDetailRepository(
             fetchDetail: { id in
                 XCTAssertEqual(id, 1)
@@ -313,21 +362,21 @@ final class CharacterDetailViewModelTests: XCTestCase {
                 ]
             }
         )
-
+        
         let sut = CharacterDetailViewModel(characterID: 1, repository: repository)
         await sut.load()
-
+        
         XCTAssertEqual(requestedEpisodeIDs, [1, 2, 3])
         XCTAssertEqual(sut.detail?.id, 1)
         XCTAssertEqual(sut.episodes.map(\.id), [1, 2, 3])
         XCTAssertFalse(sut.isLoading)
         XCTAssertNil(sut.errorMessage)
     }
-
+    
     func testLoad_whenDetailHasNoEpisodes_skipsEpisodeFetch() async {
         var fetchEpisodesCalled = false
         let detail = makeDetail(id: 2, episodeIDs: [])
-
+        
         let repository = CharacterDetailRepository(
             fetchDetail: { _ in detail },
             fetchEpisodes: { _ in
@@ -335,57 +384,57 @@ final class CharacterDetailViewModelTests: XCTestCase {
                 return []
             }
         )
-
+        
         let sut = CharacterDetailViewModel(characterID: 2, repository: repository)
         await sut.load()
-
+        
         XCTAssertFalse(fetchEpisodesCalled)
         XCTAssertEqual(sut.detail?.id, 2)
         XCTAssertTrue(sut.episodes.isEmpty)
         XCTAssertNil(sut.errorMessage)
     }
-
+    
     func testLoad_whenDetailRequestFails_setsError() async {
         struct StubError: Error {}
-
+        
         let repository = CharacterDetailRepository(
             fetchDetail: { _ in throw StubError() },
             fetchEpisodes: { _ in [] }
         )
-
+        
         let sut = CharacterDetailViewModel(characterID: 99, repository: repository)
         await sut.load()
-
+        
         XCTAssertNil(sut.detail)
         XCTAssertTrue(sut.episodes.isEmpty)
         XCTAssertNotNil(sut.errorMessage)
         XCTAssertFalse(sut.isLoading)
     }
-
+    
     func testLoad_whenEpisodeRequestFails_keepsDetailAndReturnsEmptyEpisodes() async {
         struct StubError: Error {}
         let detail = makeDetail(id: 4, episodeIDs: [1, 2])
-
+        
         let repository = CharacterDetailRepository(
             fetchDetail: { _ in detail },
             fetchEpisodes: { _ in throw StubError() }
         )
-
+        
         let sut = CharacterDetailViewModel(characterID: 4, repository: repository)
         await sut.load()
-
+        
         XCTAssertEqual(sut.detail?.id, 4)
         XCTAssertTrue(sut.episodes.isEmpty)
         XCTAssertNil(sut.errorMessage)
         XCTAssertNotNil(sut.episodeWarningMessage)
         XCTAssertFalse(sut.isLoading)
     }
-
+    
     func testLoad_whenEpisodeRequestFailsThenSucceeds_clearsEpisodeWarning() async {
         struct StubError: Error {}
         let detail = makeDetail(id: 5, episodeIDs: [1, 2])
         var fetchEpisodesCallCount = 0
-
+        
         let repository = CharacterDetailRepository(
             fetchDetail: { _ in detail },
             fetchEpisodes: { _ in
@@ -399,18 +448,18 @@ final class CharacterDetailViewModelTests: XCTestCase {
                 ]
             }
         )
-
+        
         let sut = CharacterDetailViewModel(characterID: 5, repository: repository)
-
+        
         await sut.load()
         XCTAssertNotNil(sut.episodeWarningMessage)
         XCTAssertTrue(sut.episodes.isEmpty)
-
+        
         await sut.load()
         XCTAssertNil(sut.episodeWarningMessage)
         XCTAssertEqual(sut.episodes.map(\.id), [1, 2])
     }
-
+    
     private func makeDetail(id: Int, episodeIDs: [Int]) -> CharacterDetail {
         let episodeURLs = episodeIDs.compactMap { URL(string: "https://rickandmortyapi.com/api/episode/\($0)") }
         return CharacterDetail(
@@ -426,7 +475,7 @@ final class CharacterDetailViewModelTests: XCTestCase {
             episode: episodeURLs
         )
     }
-
+    
     private func makeEpisode(id: Int, code: String, name: String) -> Episode {
         Episode(
             id: id,
@@ -438,32 +487,32 @@ final class CharacterDetailViewModelTests: XCTestCase {
 }
 
 final class CharacterDetailEpisodesSectionStateTests: XCTestCase {
-
+    
     func testCollapsedState_showsFirstEightEpisodesWithSummary() {
         let state = CharacterDetailEpisodesSectionState(
             episodes: makeEpisodes(count: 12),
             showsAllEpisodes: false
         )
-
+        
         XCTAssertEqual(state.displayedEpisodes.count, 8)
         XCTAssertEqual(state.displayedEpisodes.map(\.id), Array(1...8))
         XCTAssertTrue(state.canToggleExpansion)
         XCTAssertEqual(state.expansionButtonTitle, "Show All Episodes")
         XCTAssertEqual(state.collapsedSummaryText, "Showing 8 of 12.")
     }
-
+    
     func testExpandedState_showsAllEpisodesWithoutSummary() {
         let state = CharacterDetailEpisodesSectionState(
             episodes: makeEpisodes(count: 12),
             showsAllEpisodes: true
         )
-
+        
         XCTAssertEqual(state.displayedEpisodes.count, 12)
         XCTAssertTrue(state.canToggleExpansion)
         XCTAssertEqual(state.expansionButtonTitle, "Show Less")
         XCTAssertNil(state.collapsedSummaryText)
     }
-
+    
     private func makeEpisodes(count: Int) -> [Episode] {
         (1...count).map { id in
             Episode(
@@ -477,30 +526,30 @@ final class CharacterDetailEpisodesSectionStateTests: XCTestCase {
 }
 
 final class CharactersRepositoryTests: XCTestCase {
-
+    
     func testFetch_returnsProvidedCharactersPage() async throws {
         let expected = CharactersPage(
             characters: [Characters(id: 42, name: "Beth", image: nil)],
             nextPage: 2
         )
-
+        
         let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
             XCTAssertTrue(query.isEmpty)
             return expected
         }
-
+        
         let result = try await repository.fetch(1, .init())
-
+        
         XCTAssertEqual(result, expected)
     }
-
+    
     func testFetch_propagatesThrownError() async {
         struct StubError: Error {}
         let repository = CharactersRepository { _, _ in
             throw StubError()
         }
-
+        
         do {
             _ = try await repository.fetch(1, .init())
             XCTFail("Expected fetch(page:query:) to throw")
@@ -510,29 +559,29 @@ final class CharactersRepositoryTests: XCTestCase {
             XCTFail("Unexpected error type: \(error)")
         }
     }
-
+    
     func testMock_returnsPreviewCharactersOnPage1() async throws {
         let repository = CharactersRepository.mock()
-
+        
         let result = try await repository.fetch(1, .init())
-
+        
         XCTAssertFalse(result.characters.isEmpty)
         XCTAssertNil(result.nextPage)
     }
-
+    
     func testMock_returnsEmptyDataAfterPage1() async throws {
         let repository = CharactersRepository.mock()
-
+        
         let result = try await repository.fetch(2, .init())
-
+        
         XCTAssertTrue(result.characters.isEmpty)
         XCTAssertNil(result.nextPage)
     }
-
+    
     func testCached_whenSamePageAndQueryWithinMaxAge_returnsCachedPageWithoutSecondNetworkCall() async throws {
         var now = Date(timeIntervalSince1970: 10_000)
         var remoteCallCount = 0
-
+        
         let repository = CharactersRepository.cached(
             maxAge: 300,
             now: { now },
@@ -542,29 +591,29 @@ final class CharactersRepositoryTests: XCTestCase {
                 XCTAssertEqual(query.trimmedName, "rick")
                 XCTAssertEqual(query.status, .alive)
                 XCTAssertEqual(query.gender, .male)
-
+                
                 return CharactersPage(
                     characters: [Characters(id: remoteCallCount, name: "Character \(remoteCallCount)", image: nil)],
                     nextPage: nil
                 )
             }
         )
-
+        
         let query = CharactersQuery(name: "rick", status: .alive, gender: .male)
         let first = try await repository.fetch(1, query)
         now.addTimeInterval(15)
         let second = try await repository.fetch(1, query)
-
+        
         XCTAssertEqual(remoteCallCount, 1)
         XCTAssertEqual(first.characters.map(\.id), [1])
         XCTAssertEqual(second.characters.map(\.id), [1])
     }
-
+    
     func testCached_whenCacheExpiredAndNetworkFails_returnsStaleCachedPage() async throws {
         var now = Date(timeIntervalSince1970: 20_000)
         var remoteCallCount = 0
         var shouldFail = false
-
+        
         let repository = CharactersRepository.cached(
             maxAge: 60,
             now: { now },
@@ -572,34 +621,34 @@ final class CharactersRepositoryTests: XCTestCase {
                 remoteCallCount += 1
                 XCTAssertEqual(page, 1)
                 XCTAssertEqual(query.trimmedName, "morty")
-
+                
                 if shouldFail {
                     throw URLError(.timedOut)
                 }
-
+                
                 return CharactersPage(
                     characters: [Characters(id: 99, name: "Cached Morty", image: nil)],
                     nextPage: nil
                 )
             }
         )
-
+        
         let query = CharactersQuery(name: "morty")
         let initial = try await repository.fetch(1, query)
         XCTAssertEqual(initial.characters.map(\.id), [99])
-
+        
         now.addTimeInterval(61)
         shouldFail = true
         let fallback = try await repository.fetch(1, query)
-
+        
         XCTAssertEqual(remoteCallCount, 2)
         XCTAssertEqual(fallback.characters.map(\.id), [99])
     }
-
+    
     func testCached_whenQueriesDiffer_usesSeparateCacheEntries() async throws {
         var remoteCallCount = 0
         let now = Date(timeIntervalSince1970: 21_000)
-
+        
         let repository = CharactersRepository.cached(
             maxAge: 300,
             now: { now },
@@ -617,24 +666,24 @@ final class CharactersRepositoryTests: XCTestCase {
                 )
             }
         )
-
+        
         let aliveQuery = CharactersQuery(name: "rick", status: .alive, gender: .male)
         let deadQuery = CharactersQuery(name: "rick", status: .dead, gender: .male)
-
+        
         let firstAlive = try await repository.fetch(1, aliveQuery)
         let firstDead = try await repository.fetch(1, deadQuery)
         let secondAlive = try await repository.fetch(1, aliveQuery)
-
+        
         XCTAssertEqual(remoteCallCount, 2)
         XCTAssertEqual(firstAlive.characters.map(\.id), [1])
         XCTAssertEqual(firstDead.characters.map(\.id), [2])
         XCTAssertEqual(secondAlive.characters.map(\.id), [1])
     }
-
+    
     func testCached_whenAgeEqualsMaxAge_usesCachedPage() async throws {
         var now = Date(timeIntervalSince1970: 22_000)
         var remoteCallCount = 0
-
+        
         let repository = CharactersRepository.cached(
             maxAge: 60,
             now: { now },
@@ -646,20 +695,20 @@ final class CharactersRepositoryTests: XCTestCase {
                 )
             }
         )
-
+        
         let query = CharactersQuery(name: "boundary")
         _ = try await repository.fetch(1, query)
         now.addTimeInterval(60)
         let second = try await repository.fetch(1, query)
-
+        
         XCTAssertEqual(remoteCallCount, 1)
         XCTAssertEqual(second.characters.map(\.id), [1])
     }
-
+    
     func testCached_whenMaxAgeIsZero_refreshesAfterTimeAdvances() async throws {
         var now = Date(timeIntervalSince1970: 23_000)
         var remoteCallCount = 0
-
+        
         let repository = CharactersRepository.cached(
             maxAge: 0,
             now: { now },
@@ -671,12 +720,12 @@ final class CharactersRepositoryTests: XCTestCase {
                 )
             }
         )
-
+        
         let query = CharactersQuery(name: "zero")
         let first = try await repository.fetch(1, query)
         now.addTimeInterval(0.001)
         let second = try await repository.fetch(1, query)
-
+        
         XCTAssertEqual(remoteCallCount, 2)
         XCTAssertEqual(first.characters.map(\.id), [1])
         XCTAssertEqual(second.characters.map(\.id), [2])
@@ -684,11 +733,11 @@ final class CharactersRepositoryTests: XCTestCase {
 }
 
 final class CharacterDetailRepositoryTests: XCTestCase {
-
+    
     func testCachedFetchDetail_whenSameIDWithinMaxAge_returnsCachedValueWithoutSecondNetworkCall() async throws {
         var now = Date(timeIntervalSince1970: 30_000)
         var detailCallCount = 0
-
+        
         let repository = CharacterDetailRepository.cached(
             maxAge: 300,
             now: { now },
@@ -698,32 +747,32 @@ final class CharacterDetailRepositoryTests: XCTestCase {
             },
             fetchEpisodesRemote: { _ in [] }
         )
-
+        
         let first = try await repository.fetchDetail(7)
         now.addTimeInterval(20)
         let second = try await repository.fetchDetail(7)
-
+        
         XCTAssertEqual(detailCallCount, 1)
         XCTAssertEqual(first.name, "Detail 1")
         XCTAssertEqual(second.name, "Detail 1")
     }
-
+    
     func testCachedFetchEpisodes_whenCacheExpiredAndNetworkFails_returnsStaleEpisodes() async throws {
         var now = Date(timeIntervalSince1970: 40_000)
         var episodesCallCount = 0
         var shouldFail = false
-
+        
         let repository = CharacterDetailRepository.cached(
             maxAge: 60,
             now: { now },
             fetchDetailRemote: { id in self.makeDetail(id: id, episodeIDs: [1, 2]) },
             fetchEpisodesRemote: { ids in
                 episodesCallCount += 1
-
+                
                 if shouldFail {
                     throw URLError(.networkConnectionLost)
                 }
-
+                
                 return ids.map { id in
                     Episode(
                         id: id,
@@ -734,48 +783,48 @@ final class CharacterDetailRepositoryTests: XCTestCase {
                 }
             }
         )
-
+        
         let initial = try await repository.fetchEpisodes([1, 2])
         XCTAssertEqual(initial.map(\.id), [1, 2])
-
+        
         now.addTimeInterval(61)
         shouldFail = true
         let fallback = try await repository.fetchEpisodes([1, 2])
-
+        
         XCTAssertEqual(episodesCallCount, 2)
         XCTAssertEqual(fallback.map(\.id), [1, 2])
     }
-
+    
     func testCachedFetchDetail_whenCacheExpiredAndNetworkFails_returnsStaleDetail() async throws {
         var now = Date(timeIntervalSince1970: 41_000)
         var detailCallCount = 0
         var shouldFail = false
-
+        
         let repository = CharacterDetailRepository.cached(
             maxAge: 60,
             now: { now },
             fetchDetailRemote: { id in
                 detailCallCount += 1
-
+                
                 if shouldFail {
                     throw URLError(.cannotFindHost)
                 }
-
+                
                 return self.makeDetail(id: id, episodeIDs: [1, 2], name: "Detail \(detailCallCount)")
             },
             fetchEpisodesRemote: { _ in [] }
         )
-
+        
         let initial = try await repository.fetchDetail(7)
         now.addTimeInterval(61)
         shouldFail = true
         let fallback = try await repository.fetchDetail(7)
-
+        
         XCTAssertEqual(detailCallCount, 2)
         XCTAssertEqual(initial.name, "Detail 1")
         XCTAssertEqual(fallback.name, "Detail 1")
     }
-
+    
     private func makeDetail(id: Int, episodeIDs: [Int], name: String = "Character") -> CharacterDetail {
         let episodeURLs = episodeIDs.compactMap { URL(string: "https://rickandmortyapi.com/api/episode/\($0)") }
         return CharacterDetail(

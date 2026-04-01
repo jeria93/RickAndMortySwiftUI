@@ -12,7 +12,7 @@ enum CharacterStatusFilter: String, CaseIterable, Equatable {
     case alive
     case dead
     case unknown
-    
+
     var title: String {
         switch self {
         case .any:
@@ -25,7 +25,7 @@ enum CharacterStatusFilter: String, CaseIterable, Equatable {
             "Unknown"
         }
     }
-    
+
     var apiValue: String? {
         switch self {
         case .any:
@@ -42,7 +42,7 @@ enum CharacterGenderFilter: String, CaseIterable, Equatable {
     case male
     case genderless
     case unknown
-    
+
     var title: String {
         switch self {
         case .any:
@@ -57,7 +57,7 @@ enum CharacterGenderFilter: String, CaseIterable, Equatable {
             "Unknown"
         }
     }
-    
+
     var apiValue: String? {
         switch self {
         case .any:
@@ -72,13 +72,27 @@ struct CharactersQuery: Equatable {
     var name: String = ""
     var status: CharacterStatusFilter = .any
     var gender: CharacterGenderFilter = .any
-    
+    var species: String = ""
+    var type: String = ""
+
     var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
+    var trimmedSpecies: String {
+        species.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedType: String {
+        type.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var isEmpty: Bool {
-        trimmedName.isEmpty && status == .any && gender == .any
+        trimmedName.isEmpty &&
+        trimmedSpecies.isEmpty &&
+        trimmedType.isEmpty &&
+        status == .any &&
+        gender == .any
     }
 }
 
@@ -127,7 +141,7 @@ struct CharacterDetail: Identifiable, Decodable, Hashable {
     let location: RMNamedResource
     let image: URL?
     let episode: [URL]
-    
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -140,7 +154,7 @@ struct CharacterDetail: Identifiable, Decodable, Hashable {
         case image
         case episode
     }
-    
+
     init(
         id: Int,
         name: String,
@@ -164,7 +178,7 @@ struct CharacterDetail: Identifiable, Decodable, Hashable {
         self.image = image
         self.episode = episode
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)
@@ -186,7 +200,7 @@ struct Episode: Identifiable, Decodable, Hashable {
     let name: String
     let airDate: String
     let episode: String
-    
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name

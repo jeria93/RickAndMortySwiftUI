@@ -18,6 +18,8 @@ final class CharactersViewModel: ObservableObject {
     @Published private(set) var searchText: String = ""
     @Published private(set) var statusFilter: CharacterStatusFilter = .any
     @Published private(set) var genderFilter: CharacterGenderFilter = .any
+    @Published private(set) var speciesFilter: String = ""
+    @Published private(set) var typeFilter: String = ""
 
     private let repository: CharactersRepository
     private let debounceNanoseconds: UInt64
@@ -107,10 +109,24 @@ final class CharactersViewModel: ObservableObject {
         scheduleReloadForQueryChange()
     }
 
+    func updateSpeciesFilter(_ species: String) {
+        guard speciesFilter != species else { return }
+        speciesFilter = species
+        scheduleReloadForQueryChange()
+    }
+
+    func updateTypeFilter(_ type: String) {
+        guard typeFilter != type else { return }
+        typeFilter = type
+        scheduleReloadForQueryChange()
+    }
+
     func clearSearchAndFilters() {
         searchText = ""
         statusFilter = .any
         genderFilter = .any
+        speciesFilter = ""
+        typeFilter = ""
         scheduleReloadForQueryChange()
     }
 
@@ -118,7 +134,9 @@ final class CharactersViewModel: ObservableObject {
         let nextQuery = CharactersQuery(
             name: searchText,
             status: statusFilter,
-            gender: genderFilter
+            gender: genderFilter,
+            species: speciesFilter,
+            type: typeFilter
         )
 
         guard nextQuery != currentQuery else { return }
@@ -205,7 +223,9 @@ extension CharactersViewModel {
         nextPage: Int? = nil,
         searchText: String = "",
         statusFilter: CharacterStatusFilter = .any,
-        genderFilter: CharacterGenderFilter = .any
+        genderFilter: CharacterGenderFilter = .any,
+        speciesFilter: String = "",
+        typeFilter: String = ""
     ) -> Self {
         self.characters = characters
         self.isLoading = isLoading
@@ -216,10 +236,14 @@ extension CharactersViewModel {
         self.searchText = searchText
         self.statusFilter = statusFilter
         self.genderFilter = genderFilter
+        self.speciesFilter = speciesFilter
+        self.typeFilter = typeFilter
         self.currentQuery = CharactersQuery(
             name: searchText,
             status: statusFilter,
-            gender: genderFilter
+            gender: genderFilter,
+            species: speciesFilter,
+            type: typeFilter
         )
         return self
     }
@@ -344,7 +368,7 @@ final class CharacterDetailViewModel: ObservableObject {
         self.episodeWarningMessage = episodeWarningMessage
         isLoading = false
     }
-
+    
     func dismissError() { errorMessage = nil }
 }
 
