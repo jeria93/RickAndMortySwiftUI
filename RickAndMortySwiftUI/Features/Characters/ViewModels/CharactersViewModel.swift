@@ -231,6 +231,7 @@ final class CharacterDetailViewModel: ObservableObject {
     @Published private(set) var episodes: [Episode] = []
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var episodeWarningMessage: String?
 
     private let characterID: Int
     private let repository: CharacterDetailRepository
@@ -260,6 +261,7 @@ final class CharacterDetailViewModel: ObservableObject {
         let loadID = latestLoadID
         isLoading = true
         errorMessage = nil
+        episodeWarningMessage = nil
 
         do {
             let detail = try await repository.fetchDetail(characterID)
@@ -272,7 +274,12 @@ final class CharacterDetailViewModel: ObservableObject {
                 throw CancellationError()
             } catch {
                 // Keep the core detail visible even if episode lookup fails.
-                finishLoad(loadID, detail: detail, episodes: [])
+                finishLoad(
+                    loadID,
+                    detail: detail,
+                    episodes: [],
+                    episodeWarningMessage: "Some episodes couldn't be loaded right now."
+                )
                 return
             }
 
@@ -320,10 +327,11 @@ final class CharacterDetailViewModel: ObservableObject {
         _ loadID: UInt64,
         detail: CharacterDetail? = nil,
         episodes: [Episode]? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        episodeWarningMessage: String? = nil
     ) {
         guard loadID == latestLoadID else { return }
-        
+
         if let detail {
             self.detail = detail
         }
@@ -333,6 +341,7 @@ final class CharacterDetailViewModel: ObservableObject {
         }
 
         self.errorMessage = errorMessage
+        self.episodeWarningMessage = episodeWarningMessage
         isLoading = false
     }
 
@@ -348,6 +357,7 @@ extension CharacterDetailViewModel {
         self.detail = detail
         self.episodes = episodes
         self.errorMessage = nil
+        self.episodeWarningMessage = nil
         self.isLoading = false
         return self
     }

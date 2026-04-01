@@ -377,7 +377,38 @@ final class CharacterDetailViewModelTests: XCTestCase {
         XCTAssertEqual(sut.detail?.id, 4)
         XCTAssertTrue(sut.episodes.isEmpty)
         XCTAssertNil(sut.errorMessage)
+        XCTAssertNotNil(sut.episodeWarningMessage)
         XCTAssertFalse(sut.isLoading)
+    }
+
+    func testLoad_whenEpisodeRequestFailsThenSucceeds_clearsEpisodeWarning() async {
+        struct StubError: Error {}
+        let detail = makeDetail(id: 5, episodeIDs: [1, 2])
+        var fetchEpisodesCallCount = 0
+
+        let repository = CharacterDetailRepository(
+            fetchDetail: { _ in detail },
+            fetchEpisodes: { _ in
+                fetchEpisodesCallCount += 1
+                if fetchEpisodesCallCount == 1 {
+                    throw StubError()
+                }
+                return [
+                    self.makeEpisode(id: 1, code: "S01E01", name: "Pilot"),
+                    self.makeEpisode(id: 2, code: "S01E02", name: "Lawnmower Dog")
+                ]
+            }
+        )
+
+        let sut = CharacterDetailViewModel(characterID: 5, repository: repository)
+
+        await sut.load()
+        XCTAssertNotNil(sut.episodeWarningMessage)
+        XCTAssertTrue(sut.episodes.isEmpty)
+
+        await sut.load()
+        XCTAssertNil(sut.episodeWarningMessage)
+        XCTAssertEqual(sut.episodes.map(\.id), [1, 2])
     }
 
     private func makeDetail(id: Int, episodeIDs: [Int]) -> CharacterDetail {
@@ -406,6 +437,45 @@ final class CharacterDetailViewModelTests: XCTestCase {
     }
 }
 
+final class CharacterDetailEpisodesSectionStateTests: XCTestCase {
+
+    func testCollapsedState_showsFirstEightEpisodesWithSummary() {
+        let state = CharacterDetailEpisodesSectionState(
+            episodes: makeEpisodes(count: 12),
+            showsAllEpisodes: false
+        )
+
+        XCTAssertEqual(state.displayedEpisodes.count, 8)
+        XCTAssertEqual(state.displayedEpisodes.map(\.id), Array(1...8))
+        XCTAssertTrue(state.canToggleExpansion)
+        XCTAssertEqual(state.expansionButtonTitle, "Show All Episodes")
+        XCTAssertEqual(state.collapsedSummaryText, "Showing 8 of 12.")
+    }
+
+    func testExpandedState_showsAllEpisodesWithoutSummary() {
+        let state = CharacterDetailEpisodesSectionState(
+            episodes: makeEpisodes(count: 12),
+            showsAllEpisodes: true
+        )
+
+        XCTAssertEqual(state.displayedEpisodes.count, 12)
+        XCTAssertTrue(state.canToggleExpansion)
+        XCTAssertEqual(state.expansionButtonTitle, "Show Less")
+        XCTAssertNil(state.collapsedSummaryText)
+    }
+
+    private func makeEpisodes(count: Int) -> [Episode] {
+        (1...count).map { id in
+            Episode(
+                id: id,
+                name: "Episode \(id)",
+                airDate: "December \(id), 2013",
+                episode: String(format: "S01E%02d", id)
+            )
+        }
+    }
+}
+
 final class CharactersRepositoryTests: XCTestCase {
 
     func testFetch_returnsProvidedCharactersPage() async throws {
@@ -430,7 +500,7 @@ final class CharactersRepositoryTests: XCTestCase {
         let repository = CharactersRepository { _, _ in
             throw StubError()
         }
-        
+
         do {
             _ = try await repository.fetch(1, .init())
             XCTFail("Expected fetch(page:query:) to throw")

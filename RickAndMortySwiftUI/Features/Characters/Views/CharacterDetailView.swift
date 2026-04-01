@@ -10,6 +10,7 @@ import SwiftUI
 struct CharacterDetailView: View {
     let character: Characters
     @StateObject private var viewModel: CharacterDetailViewModel
+    @State private var showsAllEpisodes = false
 
     init(
         character: Characters,
@@ -41,6 +42,9 @@ struct CharacterDetailView: View {
         .task {
             guard !ProcessInfo.processInfo.isPreview else { return }
             await viewModel.load()
+        }
+        .onChange(of: character.id) { _, _ in
+            showsAllEpisodes = false
         }
     }
 
@@ -137,41 +141,142 @@ struct CharacterDetailView: View {
     }
 
     private var episodesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Episodes")
-                .font(.headline)
+        let sectionState = CharacterDetailEpisodesSectionState(
+            episodes: viewModel.episodes,
+            showsAllEpisodes: showsAllEpisodes
+        )
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Episodes")
+                    .font(.headline)
+
+                if !viewModel.episodes.isEmpty {
+                    Text("(\(viewModel.episodes.count))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let warning = viewModel.episodeWarningMessage, hasEpisodeReferences {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(0.12))
+                    )
+                    .accessibilityIdentifier("detail.episodes.warning")
+            }
 
             if viewModel.episodes.isEmpty {
-                Text("No episodes available.")
+                Text(episodesEmptyMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(viewModel.episodes) { episode in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(episode.episode)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 56, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(sectionState.displayedEpisodes) { episode in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(episode.episode)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 56, alignment: .leading)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(episode.name)
-                                .font(.body)
-                            Text(episode.airDate)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(episode.name)
+                                        .font(.body)
+                                    Text(episode.airDate)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 6)
+
+                            if episode.id != sectionState.displayedEpisodes.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.thinMaterial)
+                    )
+
+                    if sectionState.canToggleExpansion {
+                        Button(sectionState.expansionButtonTitle) {
+                            showsAllEpisodes.toggle()
+                        }
+                        .buttonStyle(.bordered)
+
+                        if let summary = sectionState.collapsedSummaryText {
+                            Text(summary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
             }
         }
+    }
+
+    private var hasEpisodeReferences: Bool {
+        !(viewModel.detail?.episode.isEmpty ?? true)
+    }
+
+    private var episodesEmptyMessage: String {
+        if viewModel.episodeWarningMessage != nil && hasEpisodeReferences {
+            return "Episodes are temporarily unavailable."
+        }
+
+        return "No episodes available."
+    }
+}
+
+struct CharacterDetailEpisodesSectionState {
+    let episodes: [Episode]
+    let showsAllEpisodes: Bool
+    let collapsedEpisodeCount: Int
+
+    init(
+        episodes: [Episode],
+        showsAllEpisodes: Bool,
+        collapsedEpisodeCount: Int = 8
+    ) {
+        self.episodes = episodes
+        self.showsAllEpisodes = showsAllEpisodes
+        self.collapsedEpisodeCount = max(1, collapsedEpisodeCount)
+    }
+
+    var displayedEpisodes: [Episode] {
+        if showsAllEpisodes {
+            return episodes
+        }
+
+        return Array(episodes.prefix(collapsedEpisodeCount))
+    }
+
+    var canToggleExpansion: Bool {
+        episodes.count > collapsedEpisodeCount
+    }
+
+    var expansionButtonTitle: String {
+        showsAllEpisodes ? "Show Less" : "Show All Episodes"
+    }
+
+    var collapsedSummaryText: String? {
+        guard canToggleExpansion, !showsAllEpisodes else { return nil }
+        return "Showing \(displayedEpisodes.count) of \(episodes.count)."
     }
 }
 
 private struct DetailRow: View {
     let label: String
     let value: String
-
+    
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(label)
