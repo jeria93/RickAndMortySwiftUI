@@ -14,4 +14,8 @@ enum Route: Hashable {
     /// Detail page for a specific character.
     /// - Parameter Characters: The selected character to show.
     case characterDetail(Characters)
+    /// Paginated/filterable list of locations.
+    case locations
+    /// Paginated/filterable list of episodes.
+    case episodes
 }
