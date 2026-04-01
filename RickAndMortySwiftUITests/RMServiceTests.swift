@@ -104,7 +104,9 @@ final class RMServiceTests: XCTestCase {
         let query = CharactersQuery(
             name: "rick",
             status: .alive,
-            gender: .male
+            gender: .male,
+            species: "Human",
+            type: "Scientist"
         )
 
         _ = try await sut.fetchCharacters(page: 2, query: query)
@@ -115,6 +117,8 @@ final class RMServiceTests: XCTestCase {
 
         XCTAssertTrue(items.contains(URLQueryItem(name: "page", value: "2")))
         XCTAssertTrue(items.contains(URLQueryItem(name: "name", value: "rick")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "species", value: "Human")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "type", value: "Scientist")))
         XCTAssertTrue(items.contains(URLQueryItem(name: "status", value: "alive")))
         XCTAssertTrue(items.contains(URLQueryItem(name: "gender", value: "male")))
     }
@@ -361,6 +365,171 @@ final class RMServiceTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
+    }
+
+    func testFetchLocation_successDecodesResponse() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "location/3")
+        let payload = """
+        {
+          "id": 3,
+          "name": "Citadel of Ricks",
+          "type": "Space station",
+          "dimension": "unknown",
+          "residents": [
+            "https://rickandmortyapi.com/api/character/8"
+          ],
+          "url": "https://rickandmortyapi.com/api/location/3"
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let location = try await sut.fetchLocation(id: 3)
+
+        XCTAssertEqual(location.id, 3)
+        XCTAssertEqual(location.name, "Citadel of Ricks")
+        XCTAssertEqual(location.type, "Space station")
+        XCTAssertEqual(location.residents.count, 1)
+        XCTAssertEqual(URLProtocolStub.lastRequestURL?.path, "/api/location/3")
+    }
+
+    func testFetchLocations_whenQueryHasFilters_encodesAllFilterParameters() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "location")
+        let payload = """
+        {
+          "info": {
+            "next": "https://rickandmortyapi.com/api/location?page=2"
+          },
+          "results": [
+            {
+              "id": 3,
+              "name": "Citadel of Ricks",
+              "type": "Space station",
+              "dimension": "unknown",
+              "residents": [],
+              "url": "https://rickandmortyapi.com/api/location/3"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+        let query = LocationQuery(name: "citadel", type: "space station", dimension: "unknown")
+
+        let page = try await sut.fetchLocations(page: 1, query: query)
+        let requestURL = try XCTUnwrap(URLProtocolStub.lastRequestURL)
+        let components = try XCTUnwrap(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        let items = components.queryItems ?? []
+
+        XCTAssertEqual(page.locations.count, 1)
+        XCTAssertEqual(page.nextPage, 2)
+        XCTAssertEqual(requestURL.path, "/api/location")
+        XCTAssertTrue(items.contains(URLQueryItem(name: "page", value: "1")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "name", value: "citadel")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "type", value: "space station")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "dimension", value: "unknown")))
+    }
+
+    func testFetchLocations_whenFilteredQueryReturns404_mapsToEmptyPage() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "location")
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(
+            data: #"{"error":"There is nothing here"}"#.data(using: .utf8)!,
+            response: response,
+            error: nil
+        )
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let page = try await sut.fetchLocations(page: 1, query: LocationQuery(name: "missing"))
+
+        XCTAssertTrue(page.locations.isEmpty)
+        XCTAssertNil(page.nextPage)
+    }
+
+    func testFetchEpisodesList_whenQueryHasFilters_encodesAllFilterParameters() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "episode")
+        let payload = """
+        {
+          "info": {
+            "next": null
+          },
+          "results": [
+            { "id": 1, "name": "Pilot", "air_date": "Dec 2, 2013", "episode": "S01E01" }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+        let query = EpisodeListQuery(name: "pilot", episode: "S01")
+
+        let page = try await sut.fetchEpisodes(page: 4, query: query)
+        let requestURL = try XCTUnwrap(URLProtocolStub.lastRequestURL)
+        let components = try XCTUnwrap(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        let items = components.queryItems ?? []
+
+        XCTAssertEqual(page.episodes.count, 1)
+        XCTAssertNil(page.nextPage)
+        XCTAssertEqual(requestURL.path, "/api/episode")
+        XCTAssertTrue(items.contains(URLQueryItem(name: "page", value: "4")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "name", value: "pilot")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "episode", value: "S01")))
+    }
+
+    func testFetchEpisodesList_whenFilteredQueryReturns404_mapsToEmptyPage() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "episode")
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(
+            data: #"{"error":"There is nothing here"}"#.data(using: .utf8)!,
+            response: response,
+            error: nil
+        )
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let page = try await sut.fetchEpisodes(page: 1, query: EpisodeListQuery(name: "missing"))
+
+        XCTAssertTrue(page.episodes.isEmpty)
+        XCTAssertNil(page.nextPage)
     }
 
     func testFetchEpisodes_whenMultipleIDs_decodesArrayAndPreservesOrder() async throws {

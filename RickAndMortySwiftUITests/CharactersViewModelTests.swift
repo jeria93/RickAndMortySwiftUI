@@ -841,3 +841,234 @@ final class CharacterDetailRepositoryTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class LocationSearchViewModelTests: XCTestCase {
+
+    func testQueryChange_debouncesAndSendsCombinedFilters() async {
+        var calls: [(Int, LocationQuery)] = []
+
+        let repository = LocationRepository(
+            fetch: { page, query in
+                calls.append((page, query))
+                return LocationsPage(locations: [], nextPage: nil)
+            },
+            fetchByID: { _ in
+                XCTFail("fetchByID should not be called in this test")
+                return self.makeLocation(id: 0, name: "unused")
+            }
+        )
+
+        let sut = LocationSearchViewModel(
+            repository: repository,
+            debounceNanoseconds: 120_000_000
+        )
+
+        sut.updateNameFilter("citadel")
+        sut.updateTypeFilter("space station")
+        sut.updateDimensionFilter("unknown")
+
+        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].0, 1)
+        XCTAssertEqual(
+            calls[0].1,
+            LocationQuery(name: "citadel", type: "space station", dimension: "unknown")
+        )
+        XCTAssertTrue(sut.hasActiveQuery)
+    }
+
+    func testLoadNextPage_appendsUniqueLocations() async {
+        let repository = LocationRepository(
+            fetch: { page, _ in
+                switch page {
+                case 1:
+                    return LocationsPage(
+                        locations: [
+                            self.makeLocation(id: 1, name: "Earth"),
+                            self.makeLocation(id: 2, name: "Citadel")
+                        ],
+                        nextPage: 2
+                    )
+                case 2:
+                    return LocationsPage(
+                        locations: [
+                            self.makeLocation(id: 2, name: "Citadel"),
+                            self.makeLocation(id: 3, name: "Gazorpazorp")
+                        ],
+                        nextPage: nil
+                    )
+                default:
+                    XCTFail("Unexpected page request: \(page)")
+                    return LocationsPage(locations: [], nextPage: nil)
+                }
+            },
+            fetchByID: { _ in
+                XCTFail("fetchByID should not be called in this test")
+                return self.makeLocation(id: 0, name: "unused")
+            }
+        )
+
+        let sut = LocationSearchViewModel(repository: repository, debounceNanoseconds: 0)
+
+        await sut.load()
+        await sut.loadNextPage()
+
+        XCTAssertEqual(sut.locations.map(\.id), [1, 2, 3])
+        XCTAssertFalse(sut.isLoadingNextPage)
+        XCTAssertNil(sut.paginationErrorMessage)
+    }
+
+    private func makeLocation(id: Int, name: String) -> Location {
+        Location(
+            id: id,
+            name: name,
+            type: "Space station",
+            dimension: "unknown",
+            residents: [],
+            url: URL(string: "https://rickandmortyapi.com/api/location/\(id)")
+        )
+    }
+}
+
+@MainActor
+final class EpisodeCatalogViewModelTests: XCTestCase {
+
+    func testQueryChange_debouncesAndSendsCombinedFilters() async {
+        var calls: [(Int, EpisodeListQuery)] = []
+
+        let repository = EpisodeCatalogRepository(
+            fetch: { page, query in
+                calls.append((page, query))
+                return EpisodesPage(episodes: [], nextPage: nil)
+            }
+        )
+
+        let sut = EpisodeCatalogViewModel(
+            repository: repository,
+            debounceNanoseconds: 120_000_000
+        )
+
+        sut.updateNameFilter("pilot")
+        sut.updateEpisodeFilter("S01")
+
+        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].0, 1)
+        XCTAssertEqual(calls[0].1, EpisodeListQuery(name: "pilot", episode: "S01"))
+        XCTAssertTrue(sut.hasActiveQuery)
+    }
+
+    func testLoadNextPage_appendsUniqueEpisodes() async {
+        let repository = EpisodeCatalogRepository(
+            fetch: { page, _ in
+                switch page {
+                case 1:
+                    return EpisodesPage(
+                        episodes: [
+                            self.makeEpisode(id: 1, name: "Pilot"),
+                            self.makeEpisode(id: 2, name: "Lawnmower Dog")
+                        ],
+                        nextPage: 2
+                    )
+                case 2:
+                    return EpisodesPage(
+                        episodes: [
+                            self.makeEpisode(id: 2, name: "Lawnmower Dog"),
+                            self.makeEpisode(id: 3, name: "Anatomy Park")
+                        ],
+                        nextPage: nil
+                    )
+                default:
+                    XCTFail("Unexpected page request: \(page)")
+                    return EpisodesPage(episodes: [], nextPage: nil)
+                }
+            }
+        )
+
+        let sut = EpisodeCatalogViewModel(repository: repository, debounceNanoseconds: 0)
+
+        await sut.load()
+        await sut.loadNextPage()
+
+        XCTAssertEqual(sut.episodes.map(\.id), [1, 2, 3])
+        XCTAssertFalse(sut.isLoadingNextPage)
+        XCTAssertNil(sut.paginationErrorMessage)
+    }
+
+    private func makeEpisode(id: Int, name: String) -> Episode {
+        Episode(
+            id: id,
+            name: name,
+            airDate: "December \(id), 2013",
+            episode: String(format: "S01E%02d", id)
+        )
+    }
+}
+
+final class LocationRepositoryTests: XCTestCase {
+
+    func testMock_returnsConfiguredPageAndLocationByID() async throws {
+        let expectedLocation = Location(
+            id: 3,
+            name: "Citadel of Ricks",
+            type: "Space station",
+            dimension: "unknown",
+            residents: [],
+            url: URL(string: "https://rickandmortyapi.com/api/location/3")
+        )
+
+        let repository = LocationRepository.mock(
+            pages: [
+                1: LocationsPage(locations: [expectedLocation], nextPage: nil)
+            ],
+            locationsByID: [
+                3: expectedLocation
+            ]
+        )
+
+        let page = try await repository.fetch(1, .init())
+        let location = try await repository.fetchByID(3)
+
+        XCTAssertEqual(page.locations.map(\.id), [3])
+        XCTAssertEqual(location.id, 3)
+        XCTAssertEqual(location.name, "Citadel of Ricks")
+    }
+
+    func testMock_whenLocationMissing_throws404Status() async {
+        let repository = LocationRepository.mock()
+
+        do {
+            _ = try await repository.fetchByID(999)
+            XCTFail("Expected fetchByID(_:) to throw")
+        } catch let error as RMServiceError {
+            guard case .httpStatus(let code) = error else {
+                XCTFail("Unexpected RMServiceError: \(error)")
+                return
+            }
+            XCTAssertEqual(code, 404)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+}
+
+final class EpisodeCatalogRepositoryTests: XCTestCase {
+
+    func testMock_returnsConfiguredPage() async throws {
+        let expected = EpisodesPage(
+            episodes: [
+                Episode(id: 1, name: "Pilot", airDate: "December 2, 2013", episode: "S01E01")
+            ],
+            nextPage: nil
+        )
+        let repository = EpisodeCatalogRepository.mock(pages: [1: expected])
+
+        let page = try await repository.fetch(1, .init())
+
+        XCTAssertEqual(page.episodes.map(\.id), [1])
+        XCTAssertNil(page.nextPage)
+    }
+}

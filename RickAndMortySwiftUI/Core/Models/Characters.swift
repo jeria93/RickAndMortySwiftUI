@@ -96,6 +96,48 @@ struct CharactersQuery: Equatable {
     }
 }
 
+struct LocationQuery: Equatable {
+    var name: String = ""
+    var type: String = ""
+    var dimension: String = ""
+
+    var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedType: String {
+        type.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedDimension: String {
+        dimension.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isEmpty: Bool {
+        trimmedName.isEmpty &&
+        trimmedType.isEmpty &&
+        trimmedDimension.isEmpty
+    }
+}
+
+struct EpisodeListQuery: Equatable {
+    var name: String = ""
+    var episode: String = ""
+
+    var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedEpisode: String {
+        episode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isEmpty: Bool {
+        trimmedName.isEmpty &&
+        trimmedEpisode.isEmpty
+    }
+}
+
 /// A Rick & Morty character as used by the UI.
 ///
 /// - Note: `image` is optional to stay safe in previews and in case
@@ -112,6 +154,16 @@ struct CharactersPage: Equatable {
     let nextPage: Int?
 }
 
+struct LocationsPage: Equatable {
+    let locations: [Location]
+    let nextPage: Int?
+}
+
+struct EpisodesPage: Equatable {
+    let episodes: [Episode]
+    let nextPage: Int?
+}
+
 /// Pagination metadata returned by list endpoints.
 struct RMPageInfo: Decodable {
     let next: String?
@@ -125,9 +177,64 @@ struct CharactersResponse: Decodable {
     let results: [Characters]
 }
 
+struct LocationsResponse: Decodable {
+    let info: RMPageInfo?
+    let results: [Location]
+}
+
+struct EpisodesResponse: Decodable {
+    let info: RMPageInfo?
+    let results: [Episode]
+}
+
 struct RMNamedResource: Decodable, Hashable {
     let name: String
     let url: String
+}
+
+struct Location: Identifiable, Decodable, Hashable {
+    let id: Int
+    let name: String
+    let type: String
+    let dimension: String
+    let residents: [URL]
+    let url: URL?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case type
+        case dimension
+        case residents
+        case url
+    }
+
+    init(
+        id: Int,
+        name: String,
+        type: String,
+        dimension: String,
+        residents: [URL],
+        url: URL?
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.dimension = dimension
+        self.residents = residents
+        self.url = url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(String.self, forKey: .type)
+        dimension = try container.decode(String.self, forKey: .dimension)
+        let residentStrings = try container.decodeIfPresent([String].self, forKey: .residents) ?? []
+        residents = residentStrings.compactMap(URL.init(string:))
+        url = try container.decodeIfPresent(URL.self, forKey: .url)
+    }
 }
 
 struct CharacterDetail: Identifiable, Decodable, Hashable {

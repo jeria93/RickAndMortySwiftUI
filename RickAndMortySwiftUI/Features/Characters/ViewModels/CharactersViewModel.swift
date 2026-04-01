@@ -386,3 +386,330 @@ extension CharacterDetailViewModel {
         return self
     }
 }
+
+@MainActor
+final class LocationSearchViewModel: ObservableObject {
+    @Published private(set) var locations: [Location] = []
+    @Published private(set) var isLoading: Bool = false
+    @Published private(set) var isLoadingNextPage: Bool = false
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var paginationErrorMessage: String?
+    @Published private(set) var nameFilter: String = ""
+    @Published private(set) var typeFilter: String = ""
+    @Published private(set) var dimensionFilter: String = ""
+
+    private let repository: LocationRepository
+    private let debounceNanoseconds: UInt64
+    private var latestLoadID: UInt64 = 0
+    private var nextPage: Int? = 1
+    private var currentQuery: LocationQuery = .init()
+    private var debouncedReloadTask: Task<Void, Never>?
+
+    init(
+        repository: LocationRepository,
+        debounceNanoseconds: UInt64 = 350_000_000
+    ) {
+        self.repository = repository
+        self.debounceNanoseconds = debounceNanoseconds
+    }
+
+    static func live() -> Self { .init(repository: .live()) }
+    static func mock() -> Self { .init(repository: .mock()) }
+
+    var hasActiveQuery: Bool {
+        !currentQuery.isEmpty
+    }
+
+    func load() async {
+        debouncedReloadTask?.cancel()
+        debouncedReloadTask = nil
+
+        latestLoadID += 1
+        let loadID = latestLoadID
+        isLoading = true
+        isLoadingNextPage = false
+        errorMessage = nil
+        paginationErrorMessage = nil
+        nextPage = 1
+
+        do {
+            let firstPage = try await repository.fetch(1, currentQuery)
+            finishInitialLoad(loadID, page: firstPage)
+        } catch is CancellationError {
+            finishInitialLoad(loadID)
+        } catch {
+            finishInitialLoad(loadID, errorMessage: error.localizedDescription)
+        }
+    }
+
+    func loadNextPage() async {
+        guard !isLoading, !isLoadingNextPage else { return }
+        guard let pageToLoad = nextPage else { return }
+
+        let loadID = latestLoadID
+        isLoadingNextPage = true
+        paginationErrorMessage = nil
+
+        do {
+            let page = try await repository.fetch(pageToLoad, currentQuery)
+            finishNextPageLoad(loadID, page: page)
+        } catch is CancellationError {
+            finishNextPageLoad(loadID)
+        } catch {
+            finishNextPageLoad(
+                loadID,
+                paginationErrorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    func updateNameFilter(_ name: String) {
+        guard nameFilter != name else { return }
+        nameFilter = name
+        scheduleReloadForQueryChange()
+    }
+
+    func updateTypeFilter(_ type: String) {
+        guard typeFilter != type else { return }
+        typeFilter = type
+        scheduleReloadForQueryChange()
+    }
+
+    func updateDimensionFilter(_ dimension: String) {
+        guard dimensionFilter != dimension else { return }
+        dimensionFilter = dimension
+        scheduleReloadForQueryChange()
+    }
+
+    func clearFilters() {
+        nameFilter = ""
+        typeFilter = ""
+        dimensionFilter = ""
+        scheduleReloadForQueryChange()
+    }
+
+    private func scheduleReloadForQueryChange() {
+        let nextQuery = LocationQuery(
+            name: nameFilter,
+            type: typeFilter,
+            dimension: dimensionFilter
+        )
+
+        guard nextQuery != currentQuery else { return }
+        currentQuery = nextQuery
+
+        debouncedReloadTask?.cancel()
+        debouncedReloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            if self.debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
+            }
+
+            guard !Task.isCancelled else { return }
+            self.debouncedReloadTask = nil
+            await self.load()
+        }
+    }
+
+    private func finishInitialLoad(
+        _ loadID: UInt64,
+        page: LocationsPage? = nil,
+        errorMessage: String? = nil
+    ) {
+        guard loadID == latestLoadID else { return }
+
+        if let page {
+            locations = page.locations
+            nextPage = page.nextPage
+        }
+
+        self.errorMessage = errorMessage
+        isLoading = false
+        isLoadingNextPage = false
+    }
+
+    private func finishNextPageLoad(
+        _ loadID: UInt64,
+        page: LocationsPage? = nil,
+        paginationErrorMessage: String? = nil
+    ) {
+        guard loadID == latestLoadID else { return }
+
+        if let page {
+            appendUniqueLocations(page.locations)
+            nextPage = page.nextPage
+        }
+
+        self.paginationErrorMessage = paginationErrorMessage
+        isLoadingNextPage = false
+    }
+
+    private func appendUniqueLocations(_ newLocations: [Location]) {
+        var ids = Set(locations.map(\.id))
+        let unique = newLocations.filter { ids.insert($0.id).inserted }
+        locations.append(contentsOf: unique)
+    }
+
+    func dismissError() { errorMessage = nil }
+    func dismissPaginationError() { paginationErrorMessage = nil }
+}
+
+@MainActor
+final class EpisodeCatalogViewModel: ObservableObject {
+    @Published private(set) var episodes: [Episode] = []
+    @Published private(set) var isLoading: Bool = false
+    @Published private(set) var isLoadingNextPage: Bool = false
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var paginationErrorMessage: String?
+    @Published private(set) var nameFilter: String = ""
+    @Published private(set) var episodeFilter: String = ""
+
+    private let repository: EpisodeCatalogRepository
+    private let debounceNanoseconds: UInt64
+    private var latestLoadID: UInt64 = 0
+    private var nextPage: Int? = 1
+    private var currentQuery: EpisodeListQuery = .init()
+    private var debouncedReloadTask: Task<Void, Never>?
+
+    init(
+        repository: EpisodeCatalogRepository,
+        debounceNanoseconds: UInt64 = 350_000_000
+    ) {
+        self.repository = repository
+        self.debounceNanoseconds = debounceNanoseconds
+    }
+
+    static func live() -> Self { .init(repository: .live()) }
+    static func mock() -> Self { .init(repository: .mock()) }
+
+    var hasActiveQuery: Bool {
+        !currentQuery.isEmpty
+    }
+
+    func load() async {
+        debouncedReloadTask?.cancel()
+        debouncedReloadTask = nil
+
+        latestLoadID += 1
+        let loadID = latestLoadID
+        isLoading = true
+        isLoadingNextPage = false
+        errorMessage = nil
+        paginationErrorMessage = nil
+        nextPage = 1
+
+        do {
+            let firstPage = try await repository.fetch(1, currentQuery)
+            finishInitialLoad(loadID, page: firstPage)
+        } catch is CancellationError {
+            finishInitialLoad(loadID)
+        } catch {
+            finishInitialLoad(loadID, errorMessage: error.localizedDescription)
+        }
+    }
+
+    func loadNextPage() async {
+        guard !isLoading, !isLoadingNextPage else { return }
+        guard let pageToLoad = nextPage else { return }
+
+        let loadID = latestLoadID
+        isLoadingNextPage = true
+        paginationErrorMessage = nil
+
+        do {
+            let page = try await repository.fetch(pageToLoad, currentQuery)
+            finishNextPageLoad(loadID, page: page)
+        } catch is CancellationError {
+            finishNextPageLoad(loadID)
+        } catch {
+            finishNextPageLoad(
+                loadID,
+                paginationErrorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    func updateNameFilter(_ name: String) {
+        guard nameFilter != name else { return }
+        nameFilter = name
+        scheduleReloadForQueryChange()
+    }
+
+    func updateEpisodeFilter(_ episode: String) {
+        guard episodeFilter != episode else { return }
+        episodeFilter = episode
+        scheduleReloadForQueryChange()
+    }
+
+    func clearFilters() {
+        nameFilter = ""
+        episodeFilter = ""
+        scheduleReloadForQueryChange()
+    }
+
+    private func scheduleReloadForQueryChange() {
+        let nextQuery = EpisodeListQuery(
+            name: nameFilter,
+            episode: episodeFilter
+        )
+
+        guard nextQuery != currentQuery else { return }
+        currentQuery = nextQuery
+
+        debouncedReloadTask?.cancel()
+        debouncedReloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            if self.debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: self.debounceNanoseconds)
+            }
+
+            guard !Task.isCancelled else { return }
+            self.debouncedReloadTask = nil
+            await self.load()
+        }
+    }
+
+    private func finishInitialLoad(
+        _ loadID: UInt64,
+        page: EpisodesPage? = nil,
+        errorMessage: String? = nil
+    ) {
+        guard loadID == latestLoadID else { return }
+
+        if let page {
+            episodes = page.episodes
+            nextPage = page.nextPage
+        }
+
+        self.errorMessage = errorMessage
+        isLoading = false
+        isLoadingNextPage = false
+    }
+
+    private func finishNextPageLoad(
+        _ loadID: UInt64,
+        page: EpisodesPage? = nil,
+        paginationErrorMessage: String? = nil
+    ) {
+        guard loadID == latestLoadID else { return }
+
+        if let page {
+            appendUniqueEpisodes(page.episodes)
+            nextPage = page.nextPage
+        }
+
+        self.paginationErrorMessage = paginationErrorMessage
+        isLoadingNextPage = false
+    }
+
+    private func appendUniqueEpisodes(_ newEpisodes: [Episode]) {
+        var ids = Set(episodes.map(\.id))
+        let unique = newEpisodes.filter { ids.insert($0.id).inserted }
+        episodes.append(contentsOf: unique)
+    }
+
+    func dismissError() { errorMessage = nil }
+    func dismissPaginationError() { paginationErrorMessage = nil }
+}

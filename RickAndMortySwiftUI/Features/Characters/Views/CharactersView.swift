@@ -11,6 +11,9 @@ struct CharactersView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var router: Router
     @StateObject private var characterViewModel: CharactersViewModel
+    @State private var isSpeciesTypeSheetPresented: Bool = false
+    @State private var speciesFilterDraft: String = ""
+    @State private var typeFilterDraft: String = ""
     
     init(viewModel: CharactersViewModel? = nil) {
         _characterViewModel = StateObject(wrappedValue: viewModel ?? .mock())
@@ -39,6 +42,9 @@ struct CharactersView: View {
         .task {
             guard !ProcessInfo.processInfo.isPreview else { return }
             await characterViewModel.load()
+        }
+        .sheet(isPresented: $isSpeciesTypeSheetPresented) {
+            speciesTypeFilterSheet
         }
     }
     
@@ -140,6 +146,22 @@ struct CharactersView: View {
                 }
             }
             
+            Divider()
+            Button {
+                presentSpeciesTypeFilterSheet()
+            } label: {
+                selectionLabel(
+                    title: "Species & Type",
+                    isSelected: hasSpeciesOrTypeFilter
+                )
+            }
+            
+            if hasSpeciesOrTypeFilter {
+                Button("Clear Species & Type") {
+                    clearSpeciesAndTypeFilters()
+                }
+            }
+            
             if characterViewModel.hasActiveQuery {
                 Divider()
                 Button("Clear Search & Filters") {
@@ -217,6 +239,40 @@ struct CharactersView: View {
         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
     }
     
+    private var hasSpeciesOrTypeFilter: Bool {
+        !speciesFilterDraftValue(characterViewModel.speciesFilter).isEmpty ||
+        !speciesFilterDraftValue(characterViewModel.typeFilter).isEmpty
+    }
+    
+    private var speciesTypeFilterSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Text Filters") {
+                    TextField("Species (e.g. Human)", text: $speciesFilterDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Type (e.g. Parasite)", text: $typeFilterDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            .navigationTitle("Species & Type")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        isSpeciesTypeSheetPresented = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") {
+                        applySpeciesAndTypeFilters()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+    
     private func horizontalPadding(for width: CGFloat) -> CGFloat {
         if width < 360 { return 16 }
         if width > 430 { return 28 }
@@ -230,6 +286,27 @@ struct CharactersView: View {
     private func listRowInsets(for width: CGFloat) -> EdgeInsets {
         let horizontalInset: CGFloat = width < 360 ? 12 : 16
         return EdgeInsets(top: 6, leading: horizontalInset, bottom: 6, trailing: horizontalInset)
+    }
+    
+    private func presentSpeciesTypeFilterSheet() {
+        speciesFilterDraft = characterViewModel.speciesFilter
+        typeFilterDraft = characterViewModel.typeFilter
+        isSpeciesTypeSheetPresented = true
+    }
+    
+    private func applySpeciesAndTypeFilters() {
+        characterViewModel.updateSpeciesFilter(speciesFilterDraftValue(speciesFilterDraft))
+        characterViewModel.updateTypeFilter(speciesFilterDraftValue(typeFilterDraft))
+        isSpeciesTypeSheetPresented = false
+    }
+    
+    private func clearSpeciesAndTypeFilters() {
+        characterViewModel.updateSpeciesFilter("")
+        characterViewModel.updateTypeFilter("")
+    }
+    
+    private func speciesFilterDraftValue(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
