@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode user-specific data
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
+
+# Build artifacts
+DerivedData/
+.build/
+build/
+
+# SwiftPM local metadata
+.swiftpm/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp
+*.log

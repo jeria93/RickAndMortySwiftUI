@@ -17,9 +17,21 @@ struct Characters: Identifiable, Codable, Hashable {
     let image: URL?
 }
 
+/// Page payload used by the app's characters flow.
+struct CharactersPage: Equatable {
+    let characters: [Characters]
+    let nextPage: Int?
+}
+
+/// Pagination metadata returned by list endpoints.
+struct RMPageInfo: Decodable {
+    let next: String?
+}
+
 /// Top-level response for `GET /api/character`.
 /// We only care about the `results` array in this demo.
 struct CharactersResponse: Decodable {
+    let info: RMPageInfo?
     /// Characters contained on the current page.
     let results: [Characters]
 }

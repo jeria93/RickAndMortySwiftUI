@@ -69,13 +69,55 @@ struct CharactersView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         } else {
-            List(characterViewModel.characters) { character in
-                CharacterRowView(name: character.name, imageURL: character.image)
-                    .onTapGesture { router.push(.characterDetail(character)) }
-                    .listRowInsets(rowInsets)
+            List {
+                ForEach(characterViewModel.characters) { character in
+                    CharacterRowView(name: character.name, imageURL: character.image)
+                        .onTapGesture { router.push(.characterDetail(character)) }
+                        .onAppear {
+                            Task {
+                                await characterViewModel.loadNextPageIfNeeded(
+                                    currentCharacter: character
+                                )
+                            }
+                        }
+                        .listRowInsets(rowInsets)
+                }
+
+                if characterViewModel.isLoadingNextPage ||
+                    characterViewModel.paginationErrorMessage != nil {
+                    paginationFooter
+                        .listRowInsets(rowInsets)
+                        .listRowSeparator(.hidden)
+                }
             }
             .listStyle(.plain)
             .refreshable { await characterViewModel.load() }
+        }
+    }
+
+    @ViewBuilder
+    private var paginationFooter: some View {
+        if characterViewModel.isLoadingNextPage {
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .padding(.vertical, 12)
+        } else if let paginationError = characterViewModel.paginationErrorMessage {
+            VStack(spacing: 8) {
+                Text(paginationError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Try Again") {
+                    Task { await characterViewModel.loadNextPage() }
+                }
+                .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
         }
     }
 
