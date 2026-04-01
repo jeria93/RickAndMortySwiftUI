@@ -130,6 +130,12 @@ private final class RepositoryLocalCache {
         episodesByIDs[key] = TimedEntry(value: episodes, savedAt: date)
     }
     
+    func clearAll() {
+        charactersPages.removeAll(keepingCapacity: false)
+        characterDetails.removeAll(keepingCapacity: false)
+        episodesByIDs.removeAll(keepingCapacity: false)
+    }
+    
     private func isFresh(_ savedAt: Date, now: Date, maxAge: TimeInterval) -> Bool {
         now.timeIntervalSince(savedAt) <= max(0, maxAge)
     }
@@ -155,6 +161,11 @@ struct CharactersRepository {
                 try await service.fetchCharacters(page: page, query: query)
             }
         )
+    }
+    
+    @MainActor
+    static func clearLiveCache() {
+        LiveRepositoryCache.shared.clearAll()
     }
     
     static func cached(
@@ -232,6 +243,11 @@ struct CharacterDetailRepository {
                 try await service.fetchEpisodes(ids: ids)
             }
         )
+    }
+    
+    @MainActor
+    static func clearLiveCache() {
+        LiveRepositoryCache.shared.clearAll()
     }
     
     static func cached(

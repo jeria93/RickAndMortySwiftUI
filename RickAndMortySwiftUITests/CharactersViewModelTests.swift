@@ -595,6 +595,92 @@ final class CharactersRepositoryTests: XCTestCase {
         XCTAssertEqual(remoteCallCount, 2)
         XCTAssertEqual(fallback.characters.map(\.id), [99])
     }
+
+    func testCached_whenQueriesDiffer_usesSeparateCacheEntries() async throws {
+        var remoteCallCount = 0
+        let now = Date(timeIntervalSince1970: 21_000)
+
+        let repository = CharactersRepository.cached(
+            maxAge: 300,
+            now: { now },
+            fetchRemote: { _, query in
+                remoteCallCount += 1
+                return CharactersPage(
+                    characters: [
+                        Characters(
+                            id: remoteCallCount,
+                            name: "\(query.trimmedName)-\(query.status.rawValue)",
+                            image: nil
+                        )
+                    ],
+                    nextPage: nil
+                )
+            }
+        )
+
+        let aliveQuery = CharactersQuery(name: "rick", status: .alive, gender: .male)
+        let deadQuery = CharactersQuery(name: "rick", status: .dead, gender: .male)
+
+        let firstAlive = try await repository.fetch(1, aliveQuery)
+        let firstDead = try await repository.fetch(1, deadQuery)
+        let secondAlive = try await repository.fetch(1, aliveQuery)
+
+        XCTAssertEqual(remoteCallCount, 2)
+        XCTAssertEqual(firstAlive.characters.map(\.id), [1])
+        XCTAssertEqual(firstDead.characters.map(\.id), [2])
+        XCTAssertEqual(secondAlive.characters.map(\.id), [1])
+    }
+
+    func testCached_whenAgeEqualsMaxAge_usesCachedPage() async throws {
+        var now = Date(timeIntervalSince1970: 22_000)
+        var remoteCallCount = 0
+
+        let repository = CharactersRepository.cached(
+            maxAge: 60,
+            now: { now },
+            fetchRemote: { _, _ in
+                remoteCallCount += 1
+                return CharactersPage(
+                    characters: [Characters(id: remoteCallCount, name: "Boundary", image: nil)],
+                    nextPage: nil
+                )
+            }
+        )
+
+        let query = CharactersQuery(name: "boundary")
+        _ = try await repository.fetch(1, query)
+        now.addTimeInterval(60)
+        let second = try await repository.fetch(1, query)
+
+        XCTAssertEqual(remoteCallCount, 1)
+        XCTAssertEqual(second.characters.map(\.id), [1])
+    }
+
+    func testCached_whenMaxAgeIsZero_refreshesAfterTimeAdvances() async throws {
+        var now = Date(timeIntervalSince1970: 23_000)
+        var remoteCallCount = 0
+
+        let repository = CharactersRepository.cached(
+            maxAge: 0,
+            now: { now },
+            fetchRemote: { _, _ in
+                remoteCallCount += 1
+                return CharactersPage(
+                    characters: [Characters(id: remoteCallCount, name: "Zero TTL", image: nil)],
+                    nextPage: nil
+                )
+            }
+        )
+
+        let query = CharactersQuery(name: "zero")
+        let first = try await repository.fetch(1, query)
+        now.addTimeInterval(0.001)
+        let second = try await repository.fetch(1, query)
+
+        XCTAssertEqual(remoteCallCount, 2)
+        XCTAssertEqual(first.characters.map(\.id), [1])
+        XCTAssertEqual(second.characters.map(\.id), [2])
+    }
 }
 
 final class CharacterDetailRepositoryTests: XCTestCase {
@@ -658,6 +744,36 @@ final class CharacterDetailRepositoryTests: XCTestCase {
 
         XCTAssertEqual(episodesCallCount, 2)
         XCTAssertEqual(fallback.map(\.id), [1, 2])
+    }
+
+    func testCachedFetchDetail_whenCacheExpiredAndNetworkFails_returnsStaleDetail() async throws {
+        var now = Date(timeIntervalSince1970: 41_000)
+        var detailCallCount = 0
+        var shouldFail = false
+
+        let repository = CharacterDetailRepository.cached(
+            maxAge: 60,
+            now: { now },
+            fetchDetailRemote: { id in
+                detailCallCount += 1
+
+                if shouldFail {
+                    throw URLError(.cannotFindHost)
+                }
+
+                return self.makeDetail(id: id, episodeIDs: [1, 2], name: "Detail \(detailCallCount)")
+            },
+            fetchEpisodesRemote: { _ in [] }
+        )
+
+        let initial = try await repository.fetchDetail(7)
+        now.addTimeInterval(61)
+        shouldFail = true
+        let fallback = try await repository.fetchDetail(7)
+
+        XCTAssertEqual(detailCallCount, 2)
+        XCTAssertEqual(initial.name, "Detail 1")
+        XCTAssertEqual(fallback.name, "Detail 1")
     }
 
     private func makeDetail(id: Int, episodeIDs: [Int], name: String = "Character") -> CharacterDetail {
