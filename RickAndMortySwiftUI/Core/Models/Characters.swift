@@ -7,6 +7,81 @@
 
 import Foundation
 
+enum CharacterStatusFilter: String, CaseIterable, Equatable {
+    case any
+    case alive
+    case dead
+    case unknown
+
+    var title: String {
+        switch self {
+        case .any:
+            "Any"
+        case .alive:
+            "Alive"
+        case .dead:
+            "Dead"
+        case .unknown:
+            "Unknown"
+        }
+    }
+
+    var apiValue: String? {
+        switch self {
+        case .any:
+            nil
+        default:
+            rawValue
+        }
+    }
+}
+
+enum CharacterGenderFilter: String, CaseIterable, Equatable {
+    case any
+    case female
+    case male
+    case genderless
+    case unknown
+
+    var title: String {
+        switch self {
+        case .any:
+            "Any"
+        case .female:
+            "Female"
+        case .male:
+            "Male"
+        case .genderless:
+            "Genderless"
+        case .unknown:
+            "Unknown"
+        }
+    }
+
+    var apiValue: String? {
+        switch self {
+        case .any:
+            nil
+        default:
+            rawValue
+        }
+    }
+}
+
+struct CharactersQuery: Equatable {
+    var name: String = ""
+    var status: CharacterStatusFilter = .any
+    var gender: CharacterGenderFilter = .any
+
+    var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isEmpty: Bool {
+        trimmedName.isEmpty && status == .any && gender == .any
+    }
+}
+
 /// A Rick & Morty character as used by the UI.
 ///
 /// - Note: `image` is optional to stay safe in previews and in case

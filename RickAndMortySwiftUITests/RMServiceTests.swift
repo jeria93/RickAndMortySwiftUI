@@ -79,6 +79,95 @@ final class RMServiceTests: XCTestCase {
         XCTAssertEqual(URLProtocolStub.lastRequestURL?.query, "page=2")
     }
 
+    func testFetchCharacters_whenQueryHasFilters_encodesAllFilterParameters() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+        let payload = """
+        {
+          "info": {
+            "next": null
+          },
+          "results": []
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        let query = CharactersQuery(
+            name: "rick",
+            status: .alive,
+            gender: .male
+        )
+
+        _ = try await sut.fetchCharacters(page: 2, query: query)
+
+        let requestURL = try XCTUnwrap(URLProtocolStub.lastRequestURL)
+        let components = try XCTUnwrap(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        let items = components.queryItems ?? []
+
+        XCTAssertTrue(items.contains(URLQueryItem(name: "page", value: "2")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "name", value: "rick")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "status", value: "alive")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "gender", value: "male")))
+    }
+
+    func testFetchCharacters_whenFilteredQueryReturns404_mapsToEmptyPage() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        let payload = #"{"error":"There is nothing here"}"#.data(using: .utf8)!
+        URLProtocolStub.setStub(data: payload, response: response, error: nil)
+
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+        let query = CharactersQuery(name: "not-found", status: .any, gender: .any)
+
+        let page = try await sut.fetchCharacters(page: 1, query: query)
+
+        XCTAssertTrue(page.characters.isEmpty)
+        XCTAssertNil(page.nextPage)
+    }
+
+    func testFetchCharacters_whenUnfilteredQueryReturns404_keepsHTTPStatusError() async {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+        let response = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStub(data: Data(), response: response, error: nil)
+        let sut = RMService(base: baseURL, session: makeStubbedSession())
+
+        do {
+            _ = try await sut.fetchCharacters(page: 1, query: .init())
+            XCTFail("Expected fetchCharacters(page:query:) to throw")
+        } catch let error as RMServiceError {
+            guard case .httpStatus(let code) = error else {
+                XCTFail("Unexpected RMServiceError: \(error)")
+                return
+            }
+            XCTAssertEqual(code, 404)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
     func testFetchCharacters_whenHTTPIsNon2xx_mapsHTTPStatusError() async {
         let baseURL = URL(string: "https://rickandmortyapi.com/api")!
         let endpointURL = baseURL.appending(path: "character")

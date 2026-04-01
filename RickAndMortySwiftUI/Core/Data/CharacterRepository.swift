@@ -14,18 +14,18 @@ import Foundation
 ///   page of characters or throws on failure.
 struct CharactersRepository {
     /// The fetch function used by the ViewModel.
-    let fetch: (_ page: Int) async throws -> CharactersPage
+    let fetch: (_ page: Int, _ query: CharactersQuery) async throws -> CharactersPage
 
     /// Production repository. Uses the real network service.
     static func live() -> CharactersRepository {
-        .init(fetch: { page in
-            try await RMService().fetchCharacters(page: page)
+        .init(fetch: { page, query in
+            try await RMService().fetchCharacters(page: page, query: query)
         })
     }
 
     /// Preview/testing repository. Returns stable mock data.
     static func mock() -> CharactersRepository {
-        .init(fetch: { page in
+        .init(fetch: { page, _ in
             guard page == 1 else {
                 return CharactersPage(characters: [], nextPage: nil)
             }

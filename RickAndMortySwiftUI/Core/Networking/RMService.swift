@@ -55,9 +55,13 @@ struct RMService {
     /// Fetches a page of characters.
     ///
     /// - Parameter page: Page index (1-based).
+    /// - Parameter query: Characters query for search/filter.
     /// - Returns: Characters plus pagination cursor for the next page.
     /// - Throws: `RMServiceError` for URL, transport, response and decoding failures.
-    func fetchCharacters(page: Int) async throws -> CharactersPage {
+    func fetchCharacters(
+        page: Int,
+        query: CharactersQuery = .init()
+    ) async throws -> CharactersPage {
         // Make sure base URL exists
         guard let base else {
             throw RMServiceError.badBaseURL
@@ -68,7 +72,7 @@ struct RMService {
             url: base.appending(path: "character"),
             resolvingAgainstBaseURL: false
         )
-        components?.queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
+        components?.queryItems = makeQueryItems(page: page, query: query)
         let url = components?.url ?? base.appending(path: "character")
 
         // Perform request
@@ -87,6 +91,12 @@ struct RMService {
         guard let http = response as? HTTPURLResponse else {
             throw RMServiceError.invalidResponse
         }
+
+        // For filtered searches, 404 means "no matches", not a hard error.
+        if http.statusCode == 404, !query.isEmpty {
+            return CharactersPage(characters: [], nextPage: nil)
+        }
+
         guard (200...299).contains(http.statusCode) else {
             throw RMServiceError.httpStatus(http.statusCode)
         }
@@ -105,8 +115,26 @@ struct RMService {
 
     /// Backward-compatible helper for callers that only need first-page results.
     func fetchCharacters() async throws -> [Characters] {
-        let page = try await fetchCharacters(page: 1)
+        let page = try await fetchCharacters(page: 1, query: .init())
         return page.characters
+    }
+    
+    private func makeQueryItems(page: Int, query: CharactersQuery) -> [URLQueryItem] {
+        var queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
+
+        if !query.trimmedName.isEmpty {
+            queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))
+        }
+
+        if let status = query.status.apiValue {
+            queryItems.append(URLQueryItem(name: "status", value: status))
+        }
+
+        if let gender = query.gender.apiValue {
+            queryItems.append(URLQueryItem(name: "gender", value: gender))
+        }
+
+        return queryItems
     }
 
     private func nextPageNumber(from nextURLString: String?) -> Int? {

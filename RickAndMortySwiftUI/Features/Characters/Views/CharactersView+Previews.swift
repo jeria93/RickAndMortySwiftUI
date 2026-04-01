@@ -12,21 +12,21 @@ import SwiftUI
 /// Data and states are provided by `PreviewFactory`.
 @MainActor
 extension CharactersView {
-
+    
     /// Preview showing a populated list of characters.
     /// - Returns: A `CharactersView` wrapped with a fresh `Router`.
     static var previewList: some View {
         CharactersView(viewModel: PreviewFactory.characterList())
             .environmentObject(Router())
     }
-
+    
     /// Preview showing a loading spinner state.
     /// - Returns: A `CharactersView` in loading mode.
     static var previewLoading: some View {
         CharactersView(viewModel: PreviewFactory.charactersLoading())
             .environmentObject(Router())
     }
-
+    
     /// Preview showing an error message with retry/close actions.
     /// - Returns: A `CharactersView` in error mode.
     static var previewError: some View {
