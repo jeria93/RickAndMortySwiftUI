@@ -325,3 +325,62 @@ struct CharacterDetailRepository {
         )
     }
 }
+
+/// Repository for location list/detail lookups.
+struct LocationRepository {
+    let fetch: (_ page: Int, _ query: LocationQuery) async throws -> LocationsPage
+    let fetchByID: (_ id: Int) async throws -> Location
+
+    static func live() -> LocationRepository {
+        let service = LiveRMService.shared
+        return .init(
+            fetch: { page, query in
+                try await service.fetchLocations(page: page, query: query)
+            },
+            fetchByID: { id in
+                try await service.fetchLocation(id: id)
+            }
+        )
+    }
+
+    static func mock(
+        pages: [Int: LocationsPage] = [:],
+        locationsByID: [Int: Location] = [:]
+    ) -> LocationRepository {
+        .init(
+            fetch: { page, _ in
+                pages[max(page, 1)] ?? LocationsPage(locations: [], nextPage: nil)
+            },
+            fetchByID: { id in
+                if let location = locationsByID[id] {
+                    return location
+                }
+                throw RMServiceError.httpStatus(404)
+            }
+        )
+    }
+}
+
+/// Repository for paginated/filterable episode list lookups.
+struct EpisodeCatalogRepository {
+    let fetch: (_ page: Int, _ query: EpisodeListQuery) async throws -> EpisodesPage
+
+    static func live() -> EpisodeCatalogRepository {
+        let service = LiveRMService.shared
+        return .init(
+            fetch: { page, query in
+                try await service.fetchEpisodes(page: page, query: query)
+            }
+        )
+    }
+
+    static func mock(
+        pages: [Int: EpisodesPage] = [:]
+    ) -> EpisodeCatalogRepository {
+        .init(
+            fetch: { page, _ in
+                pages[max(page, 1)] ?? EpisodesPage(episodes: [], nextPage: nil)
+            }
+        )
+    }
+}

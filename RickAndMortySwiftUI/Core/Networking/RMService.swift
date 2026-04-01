@@ -34,8 +34,8 @@ enum RMServiceError: LocalizedError {
 }
 
 /// Minimal client for the Rick & Morty API.
-/// Only implements a single endpoint for this demo:
-/// `GET /api/character`.
+/// Implements the endpoints used by this app's flows:
+/// `GET /api/character`, `GET /api/location`, and `GET /api/episode`.
 struct RMService {
     private static let defaultBaseURL = URL(string: "https://rickandmortyapi.com/api")
     private static let liveSession: URLSession = {
@@ -137,6 +137,92 @@ struct RMService {
         }
     }
     
+    func fetchLocation(id: Int) async throws -> Location {
+        let base = try baseURL()
+        let url = base.appending(path: "location/\(id)")
+        let (data, http) = try await requestData(from: url)
+        
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+        
+        do {
+            return try decoder.decode(Location.self, from: data)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+    
+    func fetchLocations(
+        page: Int,
+        query: LocationQuery? = nil
+    ) async throws -> LocationsPage {
+        let base = try baseURL()
+        
+        var components = URLComponents(
+            url: base.appending(path: "location"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = makeLocationQueryItems(page: page, query: query)
+        let url = components?.url ?? base.appending(path: "location")
+        
+        let (data, http) = try await requestData(from: url)
+        
+        if http.statusCode == 404, query?.isEmpty == false {
+            return LocationsPage(locations: [], nextPage: nil)
+        }
+        
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+        
+        do {
+            let decoded = try decoder.decode(LocationsResponse.self, from: data)
+            let nextPage = nextPageNumber(from: decoded.info?.next)
+            return LocationsPage(locations: decoded.results, nextPage: nextPage)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+    
+    func fetchEpisodes(
+        page: Int,
+        query: EpisodeListQuery? = nil
+    ) async throws -> EpisodesPage {
+        let base = try baseURL()
+        
+        var components = URLComponents(
+            url: base.appending(path: "episode"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = makeEpisodeListQueryItems(page: page, query: query)
+        let url = components?.url ?? base.appending(path: "episode")
+        
+        let (data, http) = try await requestData(from: url)
+        
+        if http.statusCode == 404, query?.isEmpty == false {
+            return EpisodesPage(episodes: [], nextPage: nil)
+        }
+        
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+        
+        do {
+            let decoded = try decoder.decode(EpisodesResponse.self, from: data)
+            let nextPage = nextPageNumber(from: decoded.info?.next)
+            return EpisodesPage(episodes: decoded.results, nextPage: nextPage)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+    
     func fetchEpisodes(ids: [Int]) async throws -> [Episode] {
         let uniqueIDs = uniquePositiveIDs(ids)
         guard !uniqueIDs.isEmpty else { return [] }
@@ -169,12 +255,54 @@ struct RMService {
             queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))
         }
         
+        if !query.trimmedSpecies.isEmpty {
+            queryItems.append(URLQueryItem(name: "species", value: query.trimmedSpecies))
+        }
+        
+        if !query.trimmedType.isEmpty {
+            queryItems.append(URLQueryItem(name: "type", value: query.trimmedType))
+        }
+        
         if let status = query.status.apiValue {
             queryItems.append(URLQueryItem(name: "status", value: status))
         }
         
         if let gender = query.gender.apiValue {
             queryItems.append(URLQueryItem(name: "gender", value: gender))
+        }
+        
+        return queryItems
+    }
+    
+    private func makeLocationQueryItems(page: Int, query: LocationQuery?) -> [URLQueryItem] {
+        var queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
+        guard let query else { return queryItems }
+        
+        if !query.trimmedName.isEmpty {
+            queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))
+        }
+        
+        if !query.trimmedType.isEmpty {
+            queryItems.append(URLQueryItem(name: "type", value: query.trimmedType))
+        }
+        
+        if !query.trimmedDimension.isEmpty {
+            queryItems.append(URLQueryItem(name: "dimension", value: query.trimmedDimension))
+        }
+        
+        return queryItems
+    }
+    
+    private func makeEpisodeListQueryItems(page: Int, query: EpisodeListQuery?) -> [URLQueryItem] {
+        var queryItems = [URLQueryItem(name: "page", value: String(max(page, 1)))]
+        guard let query else { return queryItems }
+        
+        if !query.trimmedName.isEmpty {
+            queryItems.append(URLQueryItem(name: "name", value: query.trimmedName))
+        }
+        
+        if !query.trimmedEpisode.isEmpty {
+            queryItems.append(URLQueryItem(name: "episode", value: query.trimmedEpisode))
         }
         
         return queryItems

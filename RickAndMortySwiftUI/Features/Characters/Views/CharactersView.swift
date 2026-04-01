@@ -11,11 +11,14 @@ struct CharactersView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var router: Router
     @StateObject private var characterViewModel: CharactersViewModel
-    
+    @State private var isSpeciesTypeSheetPresented: Bool = false
+    @State private var speciesFilterDraft: String = ""
+    @State private var typeFilterDraft: String = ""
+
     init(viewModel: CharactersViewModel? = nil) {
         _characterViewModel = StateObject(wrappedValue: viewModel ?? .mock())
     }
-    
+
     var body: some View {
         NavigationStack(path: $router.path) {
             GeometryReader { geometry in
@@ -27,12 +30,32 @@ struct CharactersView: View {
                 switch route {
                 case .characterDetail(let character):
                     CharacterDetailView(character: character)
+                case .locations:
+                    LocationCatalogView(viewModel: .live())
+                case .episodes:
+                    EpisodeCatalogView(viewModel: .live())
                 }
             }
             .searchable(text: searchTextBinding, prompt: "Search characters")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    CharactersExploreMenu(
+                        onLocations: { router.push(.locations) },
+                        onEpisodes: { router.push(.episodes) }
+                    )
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    filtersMenu
+                    CharactersFiltersMenu(
+                        statusFilter: characterViewModel.statusFilter,
+                        genderFilter: characterViewModel.genderFilter,
+                        hasActiveQuery: characterViewModel.hasActiveQuery,
+                        hasSpeciesOrTypeFilter: hasSpeciesOrTypeFilter,
+                        onStatusChange: { characterViewModel.updateStatusFilter($0) },
+                        onGenderChange: { characterViewModel.updateGenderFilter($0) },
+                        onEditSpeciesType: { presentSpeciesTypeFilterSheet() },
+                        onClearSpeciesType: { clearSpeciesAndTypeFilters() },
+                        onClearAll: { characterViewModel.clearSearchAndFilters() }
+                    )
                 }
             }
         }
@@ -40,13 +63,21 @@ struct CharactersView: View {
             guard !ProcessInfo.processInfo.isPreview else { return }
             await characterViewModel.load()
         }
+        .sheet(isPresented: $isSpeciesTypeSheetPresented) {
+            CharactersSpeciesTypeFilterSheet(
+                speciesDraft: $speciesFilterDraft,
+                typeDraft: $typeFilterDraft,
+                onCancel: { isSpeciesTypeSheetPresented = false },
+                onApply: { applySpeciesAndTypeFilters() }
+            )
+        }
     }
-    
+
     @ViewBuilder
     private func content(for size: CGSize) -> some View {
         let horizontalPadding = horizontalPadding(for: size.width)
         let rowInsets = listRowInsets(for: size.width)
-        
+
         if characterViewModel.isLoading {
             LoadingView(message: "Loading...")
                 .padding(.horizontal, horizontalPadding)
@@ -66,7 +97,7 @@ struct CharactersView: View {
                         systemImage: "person.3",
                         description: Text(emptyStateMessage)
                     )
-                    
+
                     if characterViewModel.hasActiveQuery {
                         clearFiltersButton
                     } else {
@@ -92,10 +123,17 @@ struct CharactersView: View {
                         }
                         .listRowInsets(rowInsets)
                 }
-                
+
                 if characterViewModel.isLoadingNextPage ||
                     characterViewModel.paginationErrorMessage != nil {
-                    paginationFooter
+                    CatalogPaginationFooter(
+                        isLoadingNextPage: characterViewModel.isLoadingNextPage,
+                        paginationErrorMessage: characterViewModel.paginationErrorMessage,
+                        canLoadMore: false,
+                        loadMoreTitle: nil,
+                        onRetry: { Task { await characterViewModel.loadNextPage() } },
+                        onLoadMore: {}
+                    )
                         .listRowInsets(rowInsets)
                         .listRowSeparator(.hidden)
                 }
@@ -104,103 +142,24 @@ struct CharactersView: View {
             .refreshable { await characterViewModel.load() }
         }
     }
-    
+
     private var searchTextBinding: Binding<String> {
         Binding(
             get: { characterViewModel.searchText },
             set: { characterViewModel.updateSearchText($0) }
         )
     }
-    
-    private var filtersMenu: some View {
-        Menu {
-            Menu("Status") {
-                ForEach(CharacterStatusFilter.allCases, id: \.self) { status in
-                    Button {
-                        characterViewModel.updateStatusFilter(status)
-                    } label: {
-                        selectionLabel(
-                            title: status.title,
-                            isSelected: characterViewModel.statusFilter == status
-                        )
-                    }
-                }
-            }
-            
-            Menu("Gender") {
-                ForEach(CharacterGenderFilter.allCases, id: \.self) { gender in
-                    Button {
-                        characterViewModel.updateGenderFilter(gender)
-                    } label: {
-                        selectionLabel(
-                            title: gender.title,
-                            isSelected: characterViewModel.genderFilter == gender
-                        )
-                    }
-                }
-            }
-            
-            if characterViewModel.hasActiveQuery {
-                Divider()
-                Button("Clear Search & Filters") {
-                    characterViewModel.clearSearchAndFilters()
-                }
-            }
-        } label: {
-            Label(
-                "Filters",
-                systemImage: characterViewModel.hasActiveQuery
-                ? "line.3.horizontal.decrease.circle.fill"
-                : "line.3.horizontal.decrease.circle"
-            )
-        }
-    }
-    
-    @ViewBuilder
-    private func selectionLabel(title: String, isSelected: Bool) -> some View {
-        if isSelected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
-    }
-    
+
     private var emptyStateTitle: String {
         characterViewModel.hasActiveQuery ? "No matching characters" : "No characters found"
     }
-    
+
     private var emptyStateMessage: String {
         characterViewModel.hasActiveQuery
         ? "Try adjusting your search or filters."
         : "Try again to load characters."
     }
-    
-    @ViewBuilder
-    private var paginationFooter: some View {
-        if characterViewModel.isLoadingNextPage {
-            HStack {
-                Spacer()
-                ProgressView()
-                Spacer()
-            }
-            .padding(.vertical, 12)
-        } else if let paginationError = characterViewModel.paginationErrorMessage {
-            VStack(spacing: 8) {
-                Text(paginationError)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                
-                Button("Try Again") {
-                    Task { await characterViewModel.loadNextPage() }
-                }
-                .buttonStyle(.bordered)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-        }
-    }
-    
+
     private var retryButton: some View {
         Button("Retry") {
             Task { await characterViewModel.load() }
@@ -208,7 +167,7 @@ struct CharactersView: View {
         .buttonStyle(.borderedProminent)
         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
     }
-    
+
     private var clearFiltersButton: some View {
         Button("Clear Search & Filters") {
             characterViewModel.clearSearchAndFilters()
@@ -216,20 +175,46 @@ struct CharactersView: View {
         .buttonStyle(.borderedProminent)
         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
     }
-    
+
+    private var hasSpeciesOrTypeFilter: Bool {
+        !speciesFilterDraftValue(characterViewModel.speciesFilter).isEmpty ||
+        !speciesFilterDraftValue(characterViewModel.typeFilter).isEmpty
+    }
+
     private func horizontalPadding(for width: CGFloat) -> CGFloat {
         if width < 360 { return 16 }
         if width > 430 { return 28 }
         return 24
     }
-    
+
     private func verticalPadding(for height: CGFloat) -> CGFloat {
         height < 700 ? 20 : 32
     }
-    
+
     private func listRowInsets(for width: CGFloat) -> EdgeInsets {
         let horizontalInset: CGFloat = width < 360 ? 12 : 16
         return EdgeInsets(top: 6, leading: horizontalInset, bottom: 6, trailing: horizontalInset)
+    }
+
+    private func presentSpeciesTypeFilterSheet() {
+        speciesFilterDraft = characterViewModel.speciesFilter
+        typeFilterDraft = characterViewModel.typeFilter
+        isSpeciesTypeSheetPresented = true
+    }
+
+    private func applySpeciesAndTypeFilters() {
+        characterViewModel.updateSpeciesFilter(speciesFilterDraftValue(speciesFilterDraft))
+        characterViewModel.updateTypeFilter(speciesFilterDraftValue(typeFilterDraft))
+        isSpeciesTypeSheetPresented = false
+    }
+
+    private func clearSpeciesAndTypeFilters() {
+        characterViewModel.updateSpeciesFilter("")
+        characterViewModel.updateTypeFilter("")
+    }
+
+    private func speciesFilterDraftValue(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
