@@ -8,32 +8,25 @@
 import SwiftUI
 
 struct LocationCatalogView: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel: LocationSearchViewModel
     @State private var isFilterSheetPresented: Bool = false
     @State private var typeFilterDraft: String = ""
     @State private var dimensionFilterDraft: String = ""
-    
+
     init(viewModel: LocationSearchViewModel? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel ?? .live())
     }
-    
+
     var body: some View {
         content
             .navigationTitle("Locations")
             .searchable(text: nameFilterBinding, prompt: "Search locations")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        presentFilterSheet()
-                    } label: {
-                        Label(
-                            "Filters",
-                            systemImage: viewModel.hasActiveQuery
-                            ? "line.3.horizontal.decrease.circle.fill"
-                            : "line.3.horizontal.decrease.circle"
-                        )
-                    }
+                    CatalogFiltersToolbarButton(
+                        hasActiveQuery: viewModel.hasActiveQuery,
+                        onTap: { presentFilterSheet() }
+                    )
                 }
             }
             .task {
@@ -41,10 +34,15 @@ struct LocationCatalogView: View {
                 await viewModel.load()
             }
             .sheet(isPresented: $isFilterSheetPresented) {
-                filterSheet
+                LocationCatalogFilterSheet(
+                    typeDraft: $typeFilterDraft,
+                    dimensionDraft: $dimensionFilterDraft,
+                    onCancel: { isFilterSheetPresented = false },
+                    onApply: { applyFilterDrafts() }
+                )
             }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading {
@@ -58,36 +56,16 @@ struct LocationCatalogView: View {
             )
             .padding(.horizontal, 24)
         } else if viewModel.locations.isEmpty {
-            ScrollView {
-                VStack(spacing: 16) {
-                    ContentUnavailableView(
-                        viewModel.hasActiveQuery ? "No matching locations" : "No locations found",
-                        systemImage: "globe",
-                        description: Text(
-                            viewModel.hasActiveQuery
-                            ? "Try adjusting your filters."
-                            : "Try again to load locations."
-                        )
-                    )
-                    
-                    if viewModel.hasActiveQuery {
-                        Button("Clear Filters") {
-                            viewModel.clearFilters()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
-                    } else {
-                        Button("Retry") {
-                            Task { await viewModel.load() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
-                    }
-                }
-                .frame(maxWidth: 520)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 32)
-            }
+            CatalogEmptyStateView(
+                hasActiveQuery: viewModel.hasActiveQuery,
+                matchingTitle: "No matching locations",
+                emptyTitle: "No locations found",
+                systemImage: "globe",
+                matchingMessage: "Try adjusting your filters.",
+                emptyMessage: "Try again to load locations.",
+                onClearFilters: { viewModel.clearFilters() },
+                onRetry: { Task { await viewModel.load() } }
+            )
         } else {
             List {
                 ForEach(viewModel.locations) { location in
@@ -103,7 +81,7 @@ struct LocationCatalogView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                
+
                 CatalogPaginationFooter(
                     isLoadingNextPage: viewModel.isLoadingNextPage,
                     paginationErrorMessage: viewModel.paginationErrorMessage,
@@ -116,51 +94,26 @@ struct LocationCatalogView: View {
             .refreshable { await viewModel.load() }
         }
     }
-    
+
     private var nameFilterBinding: Binding<String> {
         Binding(
             get: { viewModel.nameFilter },
             set: { viewModel.updateNameFilter($0) }
         )
     }
-    
-    private var filterSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Filters") {
-                    TextField("Type (e.g. Space station)", text: $typeFilterDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Dimension (e.g. C-137)", text: $dimensionFilterDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-            }
-            .navigationTitle("Location Filters")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isFilterSheetPresented = false
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
-                        viewModel.updateTypeFilter(trimmed(typeFilterDraft))
-                        viewModel.updateDimensionFilter(trimmed(dimensionFilterDraft))
-                        isFilterSheetPresented = false
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-    
+
     private func presentFilterSheet() {
         typeFilterDraft = viewModel.typeFilter
         dimensionFilterDraft = viewModel.dimensionFilter
         isFilterSheetPresented = true
     }
-    
+
+    private func applyFilterDrafts() {
+        viewModel.updateTypeFilter(trimmed(typeFilterDraft))
+        viewModel.updateDimensionFilter(trimmed(dimensionFilterDraft))
+        isFilterSheetPresented = false
+    }
+
     private func trimmed(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }

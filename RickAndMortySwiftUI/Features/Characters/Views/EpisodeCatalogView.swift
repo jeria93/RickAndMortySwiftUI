@@ -8,31 +8,24 @@
 import SwiftUI
 
 struct EpisodeCatalogView: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel: EpisodeCatalogViewModel
     @State private var isFilterSheetPresented: Bool = false
     @State private var episodeCodeDraft: String = ""
-
+    
     init(viewModel: EpisodeCatalogViewModel? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel ?? .live())
     }
-
+    
     var body: some View {
         content
             .navigationTitle("Episodes")
             .searchable(text: nameFilterBinding, prompt: "Search episodes")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        presentFilterSheet()
-                    } label: {
-                        Label(
-                            "Filters",
-                            systemImage: viewModel.hasActiveQuery
-                            ? "line.3.horizontal.decrease.circle.fill"
-                            : "line.3.horizontal.decrease.circle"
-                        )
-                    }
+                    CatalogFiltersToolbarButton(
+                        hasActiveQuery: viewModel.hasActiveQuery,
+                        onTap: { presentFilterSheet() }
+                    )
                 }
             }
             .task {
@@ -40,10 +33,14 @@ struct EpisodeCatalogView: View {
                 await viewModel.load()
             }
             .sheet(isPresented: $isFilterSheetPresented) {
-                filterSheet
+                EpisodeCatalogFilterSheet(
+                    episodeCodeDraft: $episodeCodeDraft,
+                    onCancel: { isFilterSheetPresented = false },
+                    onApply: { applyFilterDraft() }
+                )
             }
     }
-
+    
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading {
@@ -57,36 +54,16 @@ struct EpisodeCatalogView: View {
             )
             .padding(.horizontal, 24)
         } else if viewModel.episodes.isEmpty {
-            ScrollView {
-                VStack(spacing: 16) {
-                    ContentUnavailableView(
-                        viewModel.hasActiveQuery ? "No matching episodes" : "No episodes found",
-                        systemImage: "tv",
-                        description: Text(
-                            viewModel.hasActiveQuery
-                            ? "Try adjusting your filters."
-                            : "Try again to load episodes."
-                        )
-                    )
-
-                    if viewModel.hasActiveQuery {
-                        Button("Clear Filters") {
-                            viewModel.clearFilters()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
-                    } else {
-                        Button("Retry") {
-                            Task { await viewModel.load() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 260)
-                    }
-                }
-                .frame(maxWidth: 520)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 32)
-            }
+            CatalogEmptyStateView(
+                hasActiveQuery: viewModel.hasActiveQuery,
+                matchingTitle: "No matching episodes",
+                emptyTitle: "No episodes found",
+                systemImage: "tv",
+                matchingMessage: "Try adjusting your filters.",
+                emptyMessage: "Try again to load episodes.",
+                onClearFilters: { viewModel.clearFilters() },
+                onRetry: { Task { await viewModel.load() } }
+            )
         } else {
             List {
                 ForEach(viewModel.episodes) { episode in
@@ -102,7 +79,7 @@ struct EpisodeCatalogView: View {
                     }
                     .padding(.vertical, 4)
                 }
-
+                
                 CatalogPaginationFooter(
                     isLoadingNextPage: viewModel.isLoadingNextPage,
                     paginationErrorMessage: viewModel.paginationErrorMessage,
@@ -115,46 +92,24 @@ struct EpisodeCatalogView: View {
             .refreshable { await viewModel.load() }
         }
     }
-
+    
     private var nameFilterBinding: Binding<String> {
         Binding(
             get: { viewModel.nameFilter },
             set: { viewModel.updateNameFilter($0) }
         )
     }
-
-    private var filterSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Filters") {
-                    TextField("Episode code (e.g. S01)", text: $episodeCodeDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-            }
-            .navigationTitle("Episode Filters")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isFilterSheetPresented = false
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
-                        viewModel.updateEpisodeFilter(trimmed(episodeCodeDraft))
-                        isFilterSheetPresented = false
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
+    
     private func presentFilterSheet() {
         episodeCodeDraft = viewModel.episodeFilter
         isFilterSheetPresented = true
     }
-
+    
+    private func applyFilterDraft() {
+        viewModel.updateEpisodeFilter(trimmed(episodeCodeDraft))
+        isFilterSheetPresented = false
+    }
+    
     private func trimmed(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
