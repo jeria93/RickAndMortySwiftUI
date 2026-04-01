@@ -226,6 +226,45 @@ struct CharactersRepository {
     }
 }
 
+/// Repository for character batch lookups.
+struct CharacterLookupRepository {
+    let fetchByIDs: (_ ids: [Int]) async throws -> [Characters]
+
+    static func live() -> CharacterLookupRepository {
+        let service = LiveRMService.shared
+        return .init(
+            fetchByIDs: { ids in
+                try await service.fetchCharacters(ids: ids)
+            }
+        )
+    }
+
+    static func mock(
+        charactersByID: [Int: Characters] = [:]
+    ) -> CharacterLookupRepository {
+        .init(
+            fetchByIDs: { ids in
+                let normalizedIDs = uniquePositiveIDs(ids)
+                guard !normalizedIDs.isEmpty else { return [] }
+                return normalizedIDs.compactMap { charactersByID[$0] }
+            }
+        )
+    }
+
+    private static func uniquePositiveIDs(_ ids: [Int]) -> [Int] {
+        var seen = Set<Int>()
+        var unique: [Int] = []
+
+        for id in ids where id > 0 {
+            if seen.insert(id).inserted {
+                unique.append(id)
+            }
+        }
+
+        return unique
+    }
+}
+
 struct CharacterDetailRepository {
     let fetchDetail: (_ id: Int) async throws -> CharacterDetail
     let fetchEpisodes: (_ ids: [Int]) async throws -> [Episode]
@@ -358,6 +397,45 @@ struct LocationRepository {
                 throw RMServiceError.httpStatus(404)
             }
         )
+    }
+}
+
+/// Repository for location batch lookups.
+struct LocationLookupRepository {
+    let fetchByIDs: (_ ids: [Int]) async throws -> [Location]
+
+    static func live() -> LocationLookupRepository {
+        let service = LiveRMService.shared
+        return .init(
+            fetchByIDs: { ids in
+                try await service.fetchLocations(ids: ids)
+            }
+        )
+    }
+
+    static func mock(
+        locationsByID: [Int: Location] = [:]
+    ) -> LocationLookupRepository {
+        .init(
+            fetchByIDs: { ids in
+                let normalizedIDs = uniquePositiveIDs(ids)
+                guard !normalizedIDs.isEmpty else { return [] }
+                return normalizedIDs.compactMap { locationsByID[$0] }
+            }
+        )
+    }
+
+    private static func uniquePositiveIDs(_ ids: [Int]) -> [Int] {
+        var seen = Set<Int>()
+        var unique: [Int] = []
+
+        for id in ids where id > 0 {
+            if seen.insert(id).inserted {
+                unique.append(id)
+            }
+        }
+
+        return unique
     }
 }
 

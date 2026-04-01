@@ -118,6 +118,30 @@ struct RMService {
         let page = try await fetchCharacters(page: 1, query: nil)
         return page.characters
     }
+
+    func fetchCharacters(ids: [Int]) async throws -> [Characters] {
+        let uniqueIDs = uniquePositiveIDs(ids)
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let base = try baseURL()
+        let joined = uniqueIDs.map(String.init).joined(separator: ",")
+        let url = base.appending(path: "character/\(joined)")
+        let (data, http) = try await requestData(from: url)
+
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+
+        do {
+            let decoded = try decoder.decode(RMSingleOrMany<Characters>.self, from: data)
+            let characters = decoded.array
+            return sortCharacters(characters, by: uniqueIDs)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
     
     func fetchCharacterDetail(id: Int) async throws -> CharacterDetail {
         let base = try baseURL()
@@ -148,6 +172,30 @@ struct RMService {
         
         do {
             return try decoder.decode(Location.self, from: data)
+        } catch let error as DecodingError {
+            throw RMServiceError.decoding(error)
+        } catch {
+            throw RMServiceError.unexpected(error)
+        }
+    }
+
+    func fetchLocations(ids: [Int]) async throws -> [Location] {
+        let uniqueIDs = uniquePositiveIDs(ids)
+        guard !uniqueIDs.isEmpty else { return [] }
+
+        let base = try baseURL()
+        let joined = uniqueIDs.map(String.init).joined(separator: ",")
+        let url = base.appending(path: "location/\(joined)")
+        let (data, http) = try await requestData(from: url)
+
+        guard (200...299).contains(http.statusCode) else {
+            throw RMServiceError.httpStatus(http.statusCode)
+        }
+
+        do {
+            let decoded = try decoder.decode(RMSingleOrMany<Location>.self, from: data)
+            let locations = decoded.array
+            return sortLocations(locations, by: uniqueIDs)
         } catch let error as DecodingError {
             throw RMServiceError.decoding(error)
         } catch {
@@ -337,10 +385,26 @@ struct RMService {
     }
     
     private func sortEpisodes(_ episodes: [Episode], by orderedIDs: [Int]) -> [Episode] {
+        sortByRequestedIDs(episodes, orderedIDs: orderedIDs, id: \.id)
+    }
+
+    private func sortCharacters(_ characters: [Characters], by orderedIDs: [Int]) -> [Characters] {
+        sortByRequestedIDs(characters, orderedIDs: orderedIDs, id: \.id)
+    }
+
+    private func sortLocations(_ locations: [Location], by orderedIDs: [Int]) -> [Location] {
+        sortByRequestedIDs(locations, orderedIDs: orderedIDs, id: \.id)
+    }
+
+    private func sortByRequestedIDs<T>(
+        _ values: [T],
+        orderedIDs: [Int],
+        id: KeyPath<T, Int>
+    ) -> [T] {
         let rank = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($1, $0) })
-        return episodes.sorted { lhs, rhs in
-            let leftRank = rank[lhs.id] ?? Int.max
-            let rightRank = rank[rhs.id] ?? Int.max
+        return values.sorted { lhs, rhs in
+            let leftRank = rank[lhs[keyPath: id]] ?? Int.max
+            let rightRank = rank[rhs[keyPath: id]] ?? Int.max
             return leftRank < rightRank
         }
     }

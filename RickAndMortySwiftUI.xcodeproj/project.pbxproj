@@ -25,6 +25,7 @@
 		A4E2D1FE2F108A3B00AA1101 /* CatalogPaginationFooter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E2D1FF2F108A3B00AA1101 /* CatalogPaginationFooter.swift */; };
 		A4E2D2042F108A3B00AA1101 /* CatalogFiltersToolbarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E2D2052F108A3B00AA1101 /* CatalogFiltersToolbarButton.swift */; };
 		A4E2D2062F108A3B00AA1101 /* CatalogEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E2D2072F108A3B00AA1101 /* CatalogEmptyStateView.swift */; };
+		A4E2D2082F108A3B00AA1101 /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E2D2092F108A3B00AA1101 /* RemoteImageView.swift */; };
 		03F78E0D2EB0224F00B7B666 /* CharacterRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03F78E0C2EB0224F00B7B666 /* CharacterRowView.swift */; };
 		03FABEE72EAFBAC90080DD40 /* Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FABEE62EAFBAC90080DD40 /* Route.swift */; };
 		03FABEE92EAFBB1F0080DD40 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FABEE82EAFBB1F0080DD40 /* Router.swift */; };
@@ -70,6 +71,7 @@
 		A4E2D1FF2F108A3B00AA1101 /* CatalogPaginationFooter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogPaginationFooter.swift; sourceTree = "<group>"; };
 		A4E2D2052F108A3B00AA1101 /* CatalogFiltersToolbarButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogFiltersToolbarButton.swift; sourceTree = "<group>"; };
 		A4E2D2072F108A3B00AA1101 /* CatalogEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogEmptyStateView.swift; sourceTree = "<group>"; };
+		A4E2D2092F108A3B00AA1101 /* RemoteImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		03F78E0C2EB0224F00B7B666 /* CharacterRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterRowView.swift; sourceTree = "<group>"; };
 		03FABEE62EAFBAC90080DD40 /* Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Route.swift; sourceTree = "<group>"; };
 		03FABEE82EAFBB1F0080DD40 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 				A4E2D1FF2F108A3B00AA1101 /* CatalogPaginationFooter.swift */,
 				A4E2D2052F108A3B00AA1101 /* CatalogFiltersToolbarButton.swift */,
 				A4E2D2072F108A3B00AA1101 /* CatalogEmptyStateView.swift */,
+				A4E2D2092F108A3B00AA1101 /* RemoteImageView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -401,6 +404,7 @@
 				A4E2D1FE2F108A3B00AA1101 /* CatalogPaginationFooter.swift in Sources */,
 				A4E2D2042F108A3B00AA1101 /* CatalogFiltersToolbarButton.swift in Sources */,
 				A4E2D2062F108A3B00AA1101 /* CatalogEmptyStateView.swift in Sources */,
+				A4E2D2082F108A3B00AA1101 /* RemoteImageView.swift in Sources */,
 				032903672EAC0FB200B08713 /* RMService.swift in Sources */,
 				0329036D2EAC17EE00B08713 /* PreviewCharactersPreviewData.swift in Sources */,
 				03FABEE72EAFBAC90080DD40 /* Route.swift in Sources */,

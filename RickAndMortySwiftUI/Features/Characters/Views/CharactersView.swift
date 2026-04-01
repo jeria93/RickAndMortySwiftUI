@@ -112,8 +112,12 @@ struct CharactersView: View {
         } else {
             List {
                 ForEach(characterViewModel.characters) { character in
-                    CharacterRowView(name: character.name, imageURL: character.image)
-                        .onTapGesture { router.push(.characterDetail(character)) }
+                    Button {
+                        router.push(.characterDetail(character))
+                    } label: {
+                        CharacterRowView(name: character.name, imageURL: character.image)
+                    }
+                    .buttonStyle(PressableRowButtonStyle())
                         .onAppear {
                             Task {
                                 await characterViewModel.loadNextPageIfNeeded(
@@ -232,3 +236,15 @@ struct CharactersView_Previews: PreviewProvider {
     }
 }
 #endif
+
+private struct PressableRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.primary.opacity(configuration.isPressed ? 0.08 : 0))
+            }
+            .scaleEffect(configuration.isPressed ? 0.995 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
