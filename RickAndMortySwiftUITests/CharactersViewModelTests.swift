@@ -7,8 +7,9 @@ final class CharactersViewModelTests: XCTestCase {
     func testLoad_whenRequestsOverlap_lastRequestWins() async {
         var continuations: [CheckedContinuation<CharactersPage, Error>] = []
 
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
+            XCTAssertTrue(query.isEmpty)
             return try await withCheckedThrowingContinuation { continuation in
                 continuations.append(continuation)
             }
@@ -57,8 +58,9 @@ final class CharactersViewModelTests: XCTestCase {
     }
 
     func testLoad_whenCancelled_doesNotSetErrorMessage() async {
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
+            XCTAssertTrue(query.isEmpty)
             try await Task.sleep(nanoseconds: 5_000_000_000)
             return CharactersPage(
                 characters: [self.makeCharacter(id: 1, name: "Rick")],
@@ -81,9 +83,10 @@ final class CharactersViewModelTests: XCTestCase {
     func testLoad_whenFailureThenSuccess_clearsErrorAndSetsCharacters() async {
         var callCount = 0
 
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
             callCount += 1
             XCTAssertEqual(page, 1)
+            XCTAssertTrue(query.isEmpty)
 
             if callCount == 1 {
                 throw URLError(.timedOut)
@@ -110,8 +113,9 @@ final class CharactersViewModelTests: XCTestCase {
     func testLoadNextPage_whenLastVisibleCharacterReached_appendsNextPage() async {
         var calledPages: [Int] = []
 
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
             calledPages.append(page)
+            XCTAssertTrue(query.isEmpty)
 
             switch page {
             case 1:
@@ -145,7 +149,9 @@ final class CharactersViewModelTests: XCTestCase {
     }
 
     func testLoadNextPage_whenFailure_keepsExistingCharactersAndSetsPaginationError() async {
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
+            XCTAssertTrue(query.isEmpty)
+
             switch page {
             case 1:
                 return CharactersPage(
@@ -171,6 +177,116 @@ final class CharactersViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isLoadingNextPage)
     }
 
+    func testQueryChange_debouncesAndSendsCombinedFilters() async {
+        var calls: [(Int, CharactersQuery)] = []
+
+        let repository = CharactersRepository { page, query in
+            calls.append((page, query))
+            return CharactersPage(characters: [], nextPage: nil)
+        }
+
+        let sut = CharactersViewModel(
+            repository: repository,
+            debounceNanoseconds: 120_000_000
+        )
+
+        sut.updateSearchText("rick")
+        sut.updateStatusFilter(.alive)
+        sut.updateGenderFilter(.male)
+
+        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].0, 1)
+        XCTAssertEqual(calls[0].1, CharactersQuery(name: "rick", status: .alive, gender: .male))
+    }
+
+    func testQueryChange_resetsPaginationToFirstPage() async {
+        var calls: [(Int, CharactersQuery)] = []
+
+        let repository = CharactersRepository { page, query in
+            calls.append((page, query))
+
+            if query.trimmedName.isEmpty {
+                switch page {
+                case 1:
+                    return CharactersPage(
+                        characters: [self.makeCharacter(id: 1, name: "Rick")],
+                        nextPage: 2
+                    )
+                case 2:
+                    return CharactersPage(
+                        characters: [self.makeCharacter(id: 2, name: "Morty")],
+                        nextPage: nil
+                    )
+                default:
+                    XCTFail("Unexpected page request for default query: \(page)")
+                    return CharactersPage(characters: [], nextPage: nil)
+                }
+            }
+
+            if query.trimmedName == "rick" {
+                XCTAssertEqual(page, 1)
+                return CharactersPage(
+                    characters: [self.makeCharacter(id: 10, name: "Filtered Rick")],
+                    nextPage: nil
+                )
+            }
+
+            XCTFail("Unexpected query: \(query)")
+            return CharactersPage(characters: [], nextPage: nil)
+        }
+
+        let sut = CharactersViewModel(repository: repository, debounceNanoseconds: 0)
+
+        await sut.load()
+        await sut.loadNextPage()
+        XCTAssertEqual(sut.characters.map(\.id), [1, 2])
+
+        sut.updateSearchText("rick")
+
+        for _ in 0..<100 where calls.count < 3 {
+            await Task.yield()
+        }
+        for _ in 0..<100 where sut.isLoading {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(calls.map(\.0), [1, 2, 1])
+        XCTAssertEqual(calls[2].1.trimmedName, "rick")
+        XCTAssertEqual(sut.characters.map(\.id), [10])
+        XCTAssertTrue(sut.hasActiveQuery)
+    }
+
+    func testQueryWithNoMatches_resultsInEmptyStateWithoutError() async {
+        let repository = CharactersRepository { page, query in
+            if query.trimmedName.isEmpty {
+                return CharactersPage(
+                    characters: [self.makeCharacter(id: 1, name: "Rick")],
+                    nextPage: nil
+                )
+            }
+
+            XCTAssertEqual(page, 1)
+            XCTAssertEqual(query.trimmedName, "not-found")
+            return CharactersPage(characters: [], nextPage: nil)
+        }
+
+        let sut = CharactersViewModel(repository: repository, debounceNanoseconds: 0)
+
+        await sut.load()
+        XCTAssertEqual(sut.characters.map(\.id), [1])
+
+        sut.updateSearchText("not-found")
+
+        for _ in 0..<100 where sut.isLoading {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(sut.characters.isEmpty)
+        XCTAssertNil(sut.errorMessage)
+    }
+
     private func makeCharacter(id: Int, name: String) -> Characters {
         Characters(id: id, name: name, image: nil)
     }
@@ -184,36 +300,37 @@ final class CharactersRepositoryTests: XCTestCase {
             nextPage: 2
         )
 
-        let repository = CharactersRepository { page in
+        let repository = CharactersRepository { page, query in
             XCTAssertEqual(page, 1)
+            XCTAssertTrue(query.isEmpty)
             return expected
         }
 
-        let result = try await repository.fetch(1)
+        let result = try await repository.fetch(1, .init())
 
         XCTAssertEqual(result, expected)
     }
 
     func testFetch_propagatesThrownError() async {
         struct StubError: Error {}
-        let repository = CharactersRepository { _ in
+        let repository = CharactersRepository { _, _ in
             throw StubError()
         }
 
         do {
-            _ = try await repository.fetch(1)
-            XCTFail("Expected fetch(page:) to throw")
+            _ = try await repository.fetch(1, .init())
+            XCTFail("Expected fetch(page:query:) to throw")
         } catch is StubError {
             // expected
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
     }
-
+    
     func testMock_returnsPreviewCharactersOnPage1() async throws {
         let repository = CharactersRepository.mock()
 
-        let result = try await repository.fetch(1)
+        let result = try await repository.fetch(1, .init())
 
         XCTAssertFalse(result.characters.isEmpty)
         XCTAssertNil(result.nextPage)
@@ -222,7 +339,7 @@ final class CharactersRepositoryTests: XCTestCase {
     func testMock_returnsEmptyDataAfterPage1() async throws {
         let repository = CharactersRepository.mock()
 
-        let result = try await repository.fetch(2)
+        let result = try await repository.fetch(2, .init())
 
         XCTAssertTrue(result.characters.isEmpty)
         XCTAssertNil(result.nextPage)
