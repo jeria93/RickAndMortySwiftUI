@@ -528,4 +528,151 @@ final class CharactersRepositoryTests: XCTestCase {
         XCTAssertTrue(result.characters.isEmpty)
         XCTAssertNil(result.nextPage)
     }
+
+    func testCached_whenSamePageAndQueryWithinMaxAge_returnsCachedPageWithoutSecondNetworkCall() async throws {
+        var now = Date(timeIntervalSince1970: 10_000)
+        var remoteCallCount = 0
+
+        let repository = CharactersRepository.cached(
+            maxAge: 300,
+            now: { now },
+            fetchRemote: { page, query in
+                remoteCallCount += 1
+                XCTAssertEqual(page, 1)
+                XCTAssertEqual(query.trimmedName, "rick")
+                XCTAssertEqual(query.status, .alive)
+                XCTAssertEqual(query.gender, .male)
+
+                return CharactersPage(
+                    characters: [Characters(id: remoteCallCount, name: "Character \(remoteCallCount)", image: nil)],
+                    nextPage: nil
+                )
+            }
+        )
+
+        let query = CharactersQuery(name: "rick", status: .alive, gender: .male)
+        let first = try await repository.fetch(1, query)
+        now.addTimeInterval(15)
+        let second = try await repository.fetch(1, query)
+
+        XCTAssertEqual(remoteCallCount, 1)
+        XCTAssertEqual(first.characters.map(\.id), [1])
+        XCTAssertEqual(second.characters.map(\.id), [1])
+    }
+
+    func testCached_whenCacheExpiredAndNetworkFails_returnsStaleCachedPage() async throws {
+        var now = Date(timeIntervalSince1970: 20_000)
+        var remoteCallCount = 0
+        var shouldFail = false
+
+        let repository = CharactersRepository.cached(
+            maxAge: 60,
+            now: { now },
+            fetchRemote: { page, query in
+                remoteCallCount += 1
+                XCTAssertEqual(page, 1)
+                XCTAssertEqual(query.trimmedName, "morty")
+
+                if shouldFail {
+                    throw URLError(.timedOut)
+                }
+
+                return CharactersPage(
+                    characters: [Characters(id: 99, name: "Cached Morty", image: nil)],
+                    nextPage: nil
+                )
+            }
+        )
+
+        let query = CharactersQuery(name: "morty")
+        let initial = try await repository.fetch(1, query)
+        XCTAssertEqual(initial.characters.map(\.id), [99])
+
+        now.addTimeInterval(61)
+        shouldFail = true
+        let fallback = try await repository.fetch(1, query)
+
+        XCTAssertEqual(remoteCallCount, 2)
+        XCTAssertEqual(fallback.characters.map(\.id), [99])
+    }
+}
+
+final class CharacterDetailRepositoryTests: XCTestCase {
+
+    func testCachedFetchDetail_whenSameIDWithinMaxAge_returnsCachedValueWithoutSecondNetworkCall() async throws {
+        var now = Date(timeIntervalSince1970: 30_000)
+        var detailCallCount = 0
+
+        let repository = CharacterDetailRepository.cached(
+            maxAge: 300,
+            now: { now },
+            fetchDetailRemote: { id in
+                detailCallCount += 1
+                return self.makeDetail(id: id, episodeIDs: [1, 2], name: "Detail \(detailCallCount)")
+            },
+            fetchEpisodesRemote: { _ in [] }
+        )
+
+        let first = try await repository.fetchDetail(7)
+        now.addTimeInterval(20)
+        let second = try await repository.fetchDetail(7)
+
+        XCTAssertEqual(detailCallCount, 1)
+        XCTAssertEqual(first.name, "Detail 1")
+        XCTAssertEqual(second.name, "Detail 1")
+    }
+
+    func testCachedFetchEpisodes_whenCacheExpiredAndNetworkFails_returnsStaleEpisodes() async throws {
+        var now = Date(timeIntervalSince1970: 40_000)
+        var episodesCallCount = 0
+        var shouldFail = false
+
+        let repository = CharacterDetailRepository.cached(
+            maxAge: 60,
+            now: { now },
+            fetchDetailRemote: { id in self.makeDetail(id: id, episodeIDs: [1, 2]) },
+            fetchEpisodesRemote: { ids in
+                episodesCallCount += 1
+
+                if shouldFail {
+                    throw URLError(.networkConnectionLost)
+                }
+
+                return ids.map { id in
+                    Episode(
+                        id: id,
+                        name: "Episode \(id)",
+                        airDate: "December \(id), 2013",
+                        episode: String(format: "S01E%02d", id)
+                    )
+                }
+            }
+        )
+
+        let initial = try await repository.fetchEpisodes([1, 2])
+        XCTAssertEqual(initial.map(\.id), [1, 2])
+
+        now.addTimeInterval(61)
+        shouldFail = true
+        let fallback = try await repository.fetchEpisodes([1, 2])
+
+        XCTAssertEqual(episodesCallCount, 2)
+        XCTAssertEqual(fallback.map(\.id), [1, 2])
+    }
+
+    private func makeDetail(id: Int, episodeIDs: [Int], name: String = "Character") -> CharacterDetail {
+        let episodeURLs = episodeIDs.compactMap { URL(string: "https://rickandmortyapi.com/api/episode/\($0)") }
+        return CharacterDetail(
+            id: id,
+            name: name,
+            status: "Alive",
+            species: "Human",
+            type: "",
+            gender: "Male",
+            origin: RMNamedResource(name: "Earth", url: "https://rickandmortyapi.com/api/location/1"),
+            location: RMNamedResource(name: "Citadel", url: "https://rickandmortyapi.com/api/location/3"),
+            image: URL(string: "https://rickandmortyapi.com/api/character/avatar/\(id).jpeg"),
+            episode: episodeURLs
+        )
+    }
 }
