@@ -55,6 +55,10 @@ struct RMService {
     private let base: URL?
     private let session: URLSession
     private let decoder: JSONDecoder
+    private let maxRateLimitRetryCount: Int
+    private let rateLimitBaseDelay: TimeInterval
+    private let rateLimitMaxDelay: TimeInterval
+    private let sleep: @Sendable (UInt64) async throws -> Void
     
     static func live(base: URL? = defaultBaseURL) -> Self {
         .init(base: base, session: liveSession)
@@ -63,11 +67,21 @@ struct RMService {
     init(
         base: URL? = RMService.defaultBaseURL,
         session: URLSession = RMService.liveSession,
-        decoder: JSONDecoder = JSONDecoder()
+        decoder: JSONDecoder = JSONDecoder(),
+        maxRateLimitRetryCount: Int = 2,
+        rateLimitBaseDelay: TimeInterval = 1,
+        rateLimitMaxDelay: TimeInterval = 8,
+        sleep: @escaping @Sendable (UInt64) async throws -> Void = {
+            try await Task.sleep(nanoseconds: $0)
+        }
     ) {
         self.base = base
         self.session = session
         self.decoder = decoder
+        self.maxRateLimitRetryCount = max(0, maxRateLimitRetryCount)
+        self.rateLimitBaseDelay = max(0, rateLimitBaseDelay)
+        self.rateLimitMaxDelay = max(max(0, rateLimitBaseDelay), rateLimitMaxDelay)
+        self.sleep = sleep
     }
     
     /// Fetches a page of characters.
@@ -118,20 +132,20 @@ struct RMService {
         let page = try await fetchCharacters(page: 1, query: nil)
         return page.characters
     }
-
+    
     func fetchCharacters(ids: [Int]) async throws -> [Characters] {
         let uniqueIDs = uniquePositiveIDs(ids)
         guard !uniqueIDs.isEmpty else { return [] }
-
+        
         let base = try baseURL()
         let joined = uniqueIDs.map(String.init).joined(separator: ",")
         let url = base.appending(path: "character/\(joined)")
         let (data, http) = try await requestData(from: url)
-
+        
         guard (200...299).contains(http.statusCode) else {
             throw RMServiceError.httpStatus(http.statusCode)
         }
-
+        
         do {
             let decoded = try decoder.decode(RMSingleOrMany<Characters>.self, from: data)
             let characters = decoded.array
@@ -178,20 +192,20 @@ struct RMService {
             throw RMServiceError.unexpected(error)
         }
     }
-
+    
     func fetchLocations(ids: [Int]) async throws -> [Location] {
         let uniqueIDs = uniquePositiveIDs(ids)
         guard !uniqueIDs.isEmpty else { return [] }
-
+        
         let base = try baseURL()
         let joined = uniqueIDs.map(String.init).joined(separator: ",")
         let url = base.appending(path: "location/\(joined)")
         let (data, http) = try await requestData(from: url)
-
+        
         guard (200...299).contains(http.statusCode) else {
             throw RMServiceError.httpStatus(http.statusCode)
         }
-
+        
         do {
             let decoded = try decoder.decode(RMSingleOrMany<Location>.self, from: data)
             let locations = decoded.array
@@ -387,15 +401,15 @@ struct RMService {
     private func sortEpisodes(_ episodes: [Episode], by orderedIDs: [Int]) -> [Episode] {
         sortByRequestedIDs(episodes, orderedIDs: orderedIDs, id: \.id)
     }
-
+    
     private func sortCharacters(_ characters: [Characters], by orderedIDs: [Int]) -> [Characters] {
         sortByRequestedIDs(characters, orderedIDs: orderedIDs, id: \.id)
     }
-
+    
     private func sortLocations(_ locations: [Location], by orderedIDs: [Int]) -> [Location] {
         sortByRequestedIDs(locations, orderedIDs: orderedIDs, id: \.id)
     }
-
+    
     private func sortByRequestedIDs<T>(
         _ values: [T],
         orderedIDs: [Int],
@@ -410,22 +424,81 @@ struct RMService {
     }
     
     private func requestData(from url: URL) async throws -> (Data, HTTPURLResponse) {
-        let data: Data
-        let response: URLResponse
+        var attempt = 0
         
-        do {
-            (data, response) = try await session.data(from: url)
-        } catch let error as URLError {
-            throw RMServiceError.transport(error)
-        } catch {
-            throw RMServiceError.unexpected(error)
+        while true {
+            let data: Data
+            let response: URLResponse
+            
+            do {
+                (data, response) = try await session.data(from: url)
+            } catch let error as URLError {
+                throw RMServiceError.transport(error)
+            } catch {
+                throw RMServiceError.unexpected(error)
+            }
+            
+            guard let http = response as? HTTPURLResponse else {
+                throw RMServiceError.invalidResponse
+            }
+            
+            if http.statusCode == 429, attempt < maxRateLimitRetryCount {
+                let delay = rateLimitDelay(for: http, attempt: attempt)
+                attempt += 1
+                try await sleep(delay)
+                continue
+            }
+            
+            return (data, http)
+        }
+    }
+    
+    private func rateLimitDelay(for response: HTTPURLResponse, attempt: Int) -> UInt64 {
+        let retryAfter = retryAfterInterval(from: response)
+        let backoff = min(
+            rateLimitBaseDelay * pow(2, Double(max(0, attempt))),
+            rateLimitMaxDelay
+        )
+        let delay = min(max(retryAfter ?? backoff, 0), rateLimitMaxDelay)
+        return UInt64((delay * 1_000_000_000).rounded())
+    }
+    
+    private func retryAfterInterval(from response: HTTPURLResponse, now: Date = Date()) -> TimeInterval? {
+        guard let header = response.value(forHTTPHeaderField: "Retry-After") else {
+            return nil
         }
         
-        guard let http = response as? HTTPURLResponse else {
-            throw RMServiceError.invalidResponse
+        let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let seconds = TimeInterval(trimmed) {
+            return max(0, seconds)
         }
         
-        return (data, http)
+        if let date = httpDate(from: trimmed) {
+            return max(0, date.timeIntervalSince(now))
+        }
+        
+        return nil
+    }
+    
+    private func httpDate(from value: String) -> Date? {
+        let formats = [
+            "EEE',' dd MMM yyyy HH':'mm':'ss zzz",
+            "EEEE',' dd-MMM-yy HH':'mm':'ss zzz",
+            "EEE MMM d HH':'mm':'ss yyyy"
+        ]
+        
+        for format in formats {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = format
+            
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+        
+        return nil
     }
     
     private func baseURL() throws -> URL {

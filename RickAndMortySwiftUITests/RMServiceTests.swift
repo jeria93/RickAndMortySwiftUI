@@ -201,6 +201,98 @@ final class RMServiceTests: XCTestCase {
         }
     }
 
+    func testFetchCharacters_whenRateLimited_retriesUsingRetryAfterAndThenSucceeds() async throws {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+        let payload = """
+        {
+          "results": [
+            {
+              "id": 1,
+              "name": "Rick Sanchez",
+              "image": "https://rickandmortyapi.com/api/character/avatar/1.jpeg"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let rateLimitedResponse = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 429,
+            httpVersion: nil,
+            headerFields: ["Retry-After": "3"]
+        )!
+        let successResponse = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStubs([
+            (data: Data(), response: rateLimitedResponse, error: nil),
+            (data: payload, response: successResponse, error: nil)
+        ])
+
+        let recorder = DelayRecorder()
+        let sut = RMService(
+            base: baseURL,
+            session: makeStubbedSession(),
+            sleep: { delay in
+                await recorder.record(delay)
+            }
+        )
+
+        let page = try await sut.fetchCharacters(page: 1)
+        let recordedDelays = await recorder.values()
+
+        XCTAssertEqual(page.characters.map(\.id), [1])
+        XCTAssertEqual(recordedDelays, [3_000_000_000])
+        XCTAssertEqual(URLProtocolStub.requestCount, 2)
+    }
+
+    func testFetchCharacters_whenRateLimitPersistsAfterRetries_keepsHTTP429Error() async {
+        let baseURL = URL(string: "https://rickandmortyapi.com/api")!
+        let endpointURL = baseURL.appending(path: "character")
+        let rateLimitedResponse = HTTPURLResponse(
+            url: endpointURL,
+            statusCode: 429,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        URLProtocolStub.setStubs([
+            (data: Data(), response: rateLimitedResponse, error: nil),
+            (data: Data(), response: rateLimitedResponse, error: nil)
+        ])
+
+        let recorder = DelayRecorder()
+        let sut = RMService(
+            base: baseURL,
+            session: makeStubbedSession(),
+            maxRateLimitRetryCount: 1,
+            sleep: { delay in
+                await recorder.record(delay)
+            }
+        )
+
+        do {
+            _ = try await sut.fetchCharacters(page: 1)
+            XCTFail("Expected fetchCharacters(page:) to throw")
+        } catch let error as RMServiceError {
+            let recordedDelays = await recorder.values()
+            guard case .httpStatus(let code) = error else {
+                XCTFail("Unexpected RMServiceError: \(error)")
+                return
+            }
+            XCTAssertEqual(code, 429)
+            XCTAssertEqual(recordedDelays, [1_000_000_000])
+            XCTAssertEqual(URLProtocolStub.requestCount, 2)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
     func testFetchCharacters_whenPayloadIsInvalid_throwsDecodingError() async {
         let baseURL = URL(string: "https://rickandmortyapi.com/api")!
         let endpointURL = baseURL.appending(path: "character")
@@ -803,21 +895,28 @@ private final class URLProtocolStub: URLProtocol {
     }
 
     private static let lock = NSLock()
-    private static var stub: Stub?
+    private static var stubs: [Stub] = []
     private(set) static var lastRequestURL: URL?
+    private(set) static var requestCount: Int = 0
 
     static func setStub(data: Data?, response: URLResponse?, error: Error?) {
+        setStubs([(data: data, response: response, error: error)])
+    }
+
+    static func setStubs(_ values: [(data: Data?, response: URLResponse?, error: Error?)]) {
         lock.lock()
         defer { lock.unlock() }
-        stub = Stub(data: data, response: response, error: error)
+        stubs = values.map { Stub(data: $0.data, response: $0.response, error: $0.error) }
         lastRequestURL = nil
+        requestCount = 0
     }
 
     static func reset() {
         lock.lock()
         defer { lock.unlock() }
-        stub = nil
+        stubs = []
         lastRequestURL = nil
+        requestCount = 0
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -830,8 +929,9 @@ private final class URLProtocolStub: URLProtocol {
 
     override func startLoading() {
         URLProtocolStub.lock.lock()
-        let currentStub = URLProtocolStub.stub
+        let currentStub = URLProtocolStub.stubs.isEmpty ? nil : URLProtocolStub.stubs.removeFirst()
         URLProtocolStub.lastRequestURL = request.url
+        URLProtocolStub.requestCount += 1
         URLProtocolStub.lock.unlock()
 
         if let error = currentStub?.error {
@@ -851,4 +951,16 @@ private final class URLProtocolStub: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private actor DelayRecorder {
+    private var delays: [UInt64] = []
+
+    func record(_ delay: UInt64) {
+        delays.append(delay)
+    }
+
+    func values() -> [UInt64] {
+        delays
+    }
 }
