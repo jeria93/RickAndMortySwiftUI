@@ -13,7 +13,7 @@ struct CharacterRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            RemoteImageView(url: imageURL, maxRetryCount: 1) { phase in
+            RemoteImageView(url: imageURL, maxRetryCount: 0) { phase in
                 switch phase {
                 case .empty, .loading:
                     ProgressView()
@@ -38,9 +38,9 @@ struct CharacterRowView: View {
             
             Text(name)
                 .font(.headline.weight(.semibold))
-
+            
             Spacer(minLength: 8)
-
+            
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
